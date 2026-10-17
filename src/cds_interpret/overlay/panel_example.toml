@@ -1,0 +1,97 @@
+# The thoughts panel, every option.
+#
+# This file draws the default panel. Change what you like, delete what you don't need (anything left out keeps
+# its default), and give it to the overlay:
+#
+#     with_thoughts(MyBot, pack="thoughts.npz", panel="panel.toml")
+#
+# Colours are [red, green, blue] or [red, green, blue, alpha], each 0-255.
+# Positions and sizes are fractions of the screen: x = 0.5 is the middle.
+
+[panel]
+# title = "THOUGHTS"        # default: the pack's title (make_pack(title=...), "THOUGHTS" unless you set one);
+                            # "" for no title
+x = 0.012                   # the panel's top-left corner
+y = 0.30
+width = 0.17                # about 30 characters of text
+text_scale = 1.0            # 1.2 for bigger text (the panel grows taller, not wider)
+title_scale = 1.2
+smoothing = 0.35            # numbers move this share of the way to each new reading (1 = no smoothing)
+hold = 0.6                  # seconds a feature stays listed after it stops firing (no flicker)
+draw_every = 8              # frames between draws: 8 is 15 times a second
+# value_scale = 1.0         # the outlook value that fills its bar (default: the one in the pack)
+
+[colors]
+background = [0, 0, 0, 175]
+track = [70, 70, 70, 220]   # the empty part of a bar
+title = [255, 255, 255]
+label = [215, 215, 215]     # the names on the left
+value = [255, 255, 255]     # the numbers on the right
+good = [90, 220, 120]       # the outlook bar when things look good
+bad = [240, 90, 80]         # ... and when they don't
+notice = [255, 196, 64]     # a feature firing now
+notice_held = [200, 150, 60]  # a feature that stopped firing a moment ago
+bar = [0, 170, 255]         # a bar with no colour of its own
+divider = [255, 255, 255]   # the middle mark of a centred bar
+
+[markers]
+landing = true              # where the bot's own layer thinks the ball will land: a ring with a crosshair
+landing_color = [0, 170, 255]
+landing_radius = 150.0      # in unreal units (the ball's radius is about 93)
+landing_line = true         # a line from the car to the ring
+landing_smooth = 0.25       # seconds of smoothing for the ring (0 = every reading as it comes)
+prediction = true           # where RLBot's ball prediction says it will land: a white cross
+prediction_color = [255, 255, 255]
+car_label = true            # the first feature firing, floating above the car
+# car_label_color = [255, 196, 64]
+# hook = "my_panel:draw_markers"   # your own 3D drawing (customize-the-panel.md): remove the # to use it
+
+# One table per named feature (its name in the pack, exactly), to rename it, change when it counts as firing, hide
+# it or colour it.
+# [features."lined up for a shot"]
+# label = "Lined up!"
+# threshold = 0.5           # fires above this size (default: the pack's; your names file's comments give its sizes)
+# show = true
+# color = [120, 200, 255]
+
+# The rows, top to bottom. Kinds:
+#   outlook   a bar from the middle with a word (source "value": your critic, or the pack's outlook probe)
+#   action    the move the policy leans toward, in words, and how sure it is ("lines": how many lines it may take)
+#   noticing  the named features firing now ("max", "empty", "features": which ones may appear)
+#   probes    every probe of the pack that has no row of its own, each in its own style
+#   bar       a name, a percentage and a bar under it      (source "probe:<name>" or "feature:<name>")
+#   percent   a name and a percentage
+#   seconds   a name and a time in seconds
+#   value     a name and a number ("format", e.g. "{:.0f} uu")
+#   centred   a bar from the middle, like the outlook, for any source ("scale": the value that fills it)
+#   text      a fixed line ("text")
+#   spacer    a gap ("height", in lines)
+#   custom    your own Python ("hook": "module:function"), drawn with line(), bar() and gap()
+# Every row takes "label" (the name on the left) and "color" where it has a bar.
+
+[[rows]]
+kind = "outlook"
+label = "Outlook"
+words = ["in trouble", "even", "good"]
+
+[[rows]]
+kind = "action"
+label = "Next move"
+lines = 2
+
+[[rows]]
+kind = "noticing"
+label = "Noticing"
+max = 3
+empty = "nothing unusual"
+
+[[rows]]
+kind = "probes"
+
+# For example, one of your pack's probes in a row of its own, placed where you want it (the name must be the one
+# you gave it in make_pack, capitals and all - `cds-interpret check-panel panel.toml thoughts.npz` checks):
+# [[rows]]
+# kind = "bar"
+# source = "probe:First to the ball"
+# label = "First!"
+# color = [90, 220, 120]

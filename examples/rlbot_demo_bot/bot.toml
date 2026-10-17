@@ -1,0 +1,15 @@
+#:schema https://rlbot.org/schemas/agent.json
+# The cds-interpret demo bot, plain. Install cds-interpret[rlbot] in the Python that `python` runs.
+[settings]
+name = "CDS demo bot"
+run_command = "python bot.py"
+run_command_linux = "python3 bot.py"
+agent_id = "cds-interpret/demo-bot"
+
+[details]
+description = "A tiny bot that copies a scripted player: the cds-interpret demo."
+fun_fact = "Its whole brain is 12,000 numbers."
+source_link = "https://github.com/adventure-gpt/cds-interpret"
+developer = "adventure-gpt"
+language = "Python / PyTorch"
+tags = ["1v1"]

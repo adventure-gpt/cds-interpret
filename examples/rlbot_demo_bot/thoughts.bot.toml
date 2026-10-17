@@ -1,0 +1,16 @@
+#:schema https://rlbot.org/schemas/agent.json
+# The cds-interpret demo bot with its thoughts drawn on screen (its pack, thoughts.npz, is in this folder;
+# make_pack.py makes a fresh one). Turn on rendering in RLBot.
+[settings]
+name = "CDS demo bot (thoughts)"
+run_command = "python bot.py --thoughts"
+run_command_linux = "python3 bot.py --thoughts"
+agent_id = "cds-interpret/demo-bot-thoughts"
+
+[details]
+description = "The cds-interpret demo bot, showing what its network is noticing while it plays."
+fun_fact = "The panel is read from the network's own layers by read-only hooks: the bot plays exactly the same."
+source_link = "https://github.com/adventure-gpt/cds-interpret"
+developer = "adventure-gpt"
+language = "Python / PyTorch"
+tags = ["1v1"]

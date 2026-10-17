@@ -1,0 +1,108 @@
+[project]
+name = "cds-interpret"
+dynamic = ["version"]
+description = "Look inside any PyTorch Rocket League bot: concept labels, robust probes, sparse-autoencoder features, causal tests and a live in-game thoughts overlay"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY.md"]
+authors = [{ name = "adventure-gpt" }]
+requires-python = ">=3.11"
+keywords = [
+    "rocket-league", "rlbot", "rlgym", "rocketsim", "interpretability", "mechanistic-interpretability",
+    "sparse-autoencoder", "probing", "pytorch", "reinforcement-learning",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    "numpy>=1.24",
+    "torch>=2.1",
+]
+
+[project.optional-dependencies]
+# record games in RocketSim (you also need the arena's collision meshes: see docs/howto/record-moments.md)
+sim = ["rocketsim>=2.1"]
+# RLGym v2: run your ObsBuilder on any moment, record from your RLGym env; brings RocketSim and its meshes too.
+# (RLGym pins numpy<2, which has no wheels for Python 3.13+: use Python 3.11-3.12 for this extra)
+rlgym = [
+    "rlgym-api>=2.0; python_version < '3.13'",
+    "rlgym-rocket-league[sim]>=2.0; python_version < '3.13'",
+]
+# the live thoughts overlay and recording in the real game, through RLBot v5
+rlbot = ["rlbot>=2.0.0b54"]
+all = ["cds-interpret[sim,rlgym,rlbot]"]
+
+[project.scripts]
+cds-interpret = "cds_interpret.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/adventure-gpt/cds-interpret"
+Documentation = "https://github.com/adventure-gpt/cds-interpret/tree/main/docs"
+Changelog = "https://github.com/adventure-gpt/cds-interpret/blob/main/CHANGELOG.md"
+Issues = "https://github.com/adventure-gpt/cds-interpret/issues"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
+
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/cds_interpret/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cds_interpret"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "docs", "examples", "scripts", "assets", "README.md", "LICENSE", "THIRD_PARTY.md",
+           "CHANGELOG.md", "CONTRIBUTING.md", "pyproject.toml"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = [
+    "E741",     # short math names (l, I) are fine in formulas
+    "B905",     # zip() without strict= : many zips here are over arrays of one length by construction
+    "SIM108",   # ternaries are not always clearer
+    "RUF001", "RUF002", "RUF003",   # the docs use real typography (x, -, degree signs)
+    "RUF005",
+    "RUF046",   # int(round(x)) reads clearly
+    "E501",     # lines up to about 120 characters; SVG templates and tables in docstrings may run longer
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["cds_interpret"]
+known-local-folder = ["conftest", "test_core", "test_overlay"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B018"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "slow: takes more than a few seconds",
+    "sim: needs RocketSim and its collision meshes",
+    "rlbot: needs the rlbot package",
+    "rlgym: needs RLGym v2",
+]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_unused_ignores = false
+check_untyped_defs = false

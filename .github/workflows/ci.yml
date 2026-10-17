@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff mypy
+      - run: ruff check src tests scripts examples
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu && pip install -e .
+      - run: mypy src/cds_interpret
+
+  test:
+    name: test (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, python: "3.11", extras: "sim,rlgym,rlbot" }
+          - { os: ubuntu-latest, python: "3.12", extras: "sim,rlgym,rlbot" }
+          - { os: ubuntu-latest, python: "3.13", extras: "sim,rlbot" }      # RLGym pins numpy<2: no 3.13 wheels
+          - { os: windows-latest, python: "3.12", extras: "sim,rlgym,rlbot" }
+    env:
+      OMP_NUM_THREADS: "2"
+      CDSI_TEST_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: PyTorch (CPU build)
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: cds-interpret and its extras
+        run: pip install -e ".[${{ matrix.extras }}]" pytest
+      - run: cds-interpret doctor
+      - run: pytest -ra
+
+  wheel:
+    name: the wheel, installed fresh
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build && python -m build
+      - name: install the wheel in a clean environment and run the demo
+        run: |
+          python -m venv /tmp/fresh
+          /tmp/fresh/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
+          /tmp/fresh/bin/pip install dist/*.whl
+          cd /tmp
+          /tmp/fresh/bin/cds-interpret doctor
+          /tmp/fresh/bin/cds-interpret demo --source synthetic --out /tmp/demo
+          test -s /tmp/demo/report.html
+          /tmp/fresh/bin/cds-interpret panel /tmp/panel.toml
+          test -s /tmp/panel.toml

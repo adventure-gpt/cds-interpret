@@ -1,0 +1,142 @@
+# Watch your bot think in RLBot
+
+[RLBot](https://rlbot.org) is the framework that runs bots in the real Rocket League. Add one line to your RLBot bot
+and, while it plays, a panel in the corner of the screen shows what its network is noticing:
+
+<p align="center"><img src="../../assets/overlay-panel.svg" alt="The thoughts panel" width="300"></p>
+
+- **Outlook** - a bar from the middle. Green and to the right when the bot expects to score; red and to the left when
+  it's in trouble.
+- **Next move** - the action it leans toward, in words, and how sure it is.
+- **Noticing** - the ideas (named features) firing right now. Each one stays on the list a moment after it stops, so
+  nothing flickers. The first one also floats above the car.
+- **Readings** - the probes you chose: a chance with a bar underneath, a time in seconds.
+- **On the field** - a bright blue ring with a crosshair where the network thinks the ball will come down, joined to
+  the car, and a white cross where RLBot's own prediction says it will.
+
+Your bot plays exactly the same with the panel as without it. [Here's why](#why-it-cannot-change-how-your-bot-plays).
+
+## Try it on the demo bot first
+
+`examples/rlbot_demo_bot` is a complete RLBot v5 bot folder with the panel ready to go. It's in the repository, not
+in the pip install, so get a copy first:
+
+1. `git clone https://github.com/adventure-gpt/cds-interpret`, and install with the `rlbot` extra (see the
+   [quickstart](../quickstart.md)).
+2. In RLBot, add `examples/rlbot_demo_bot/thoughts.bot.toml` as a bot. Its pack, `thoughts.npz`, is already in the
+   folder.
+3. Turn on **rendering** in RLBot's match settings, and start a match.
+
+## On your own bot
+
+### 1. Make a pack
+
+A **pack** is a small file that says what to show: which ideas (features) and which questions (probes) to read, and
+from which layer. Make it from a study of your bot:
+
+```python
+import cds_interpret as ci
+
+study = ci.Study(policy, moments)
+study.probes()
+study.features("layers.3")
+pack = study.make_pack(
+    "layers.3",
+    names="names.toml",                                   # the features you named (see the naming guide)
+    probes={"First to the ball": "first_to_ball",         # name on the panel: label
+            "Time to the ball": ("ttb_me", {"unit": "s"})},
+    title="MY BOT'S MIND",
+)
+print(ci.overlay.save_pack(pack, "thoughts.npz"))      # thoughts.npz - a few kilobytes
+```
+
+A few things `make_pack` does for you:
+
+- **Features** come from your names file - only the names you confirmed. Each gets a "firing" threshold worked out
+  from your recorded games (you can override it in the names file or the panel file).
+- **Probes** are given as `{name on the panel: label}`. Yes / no labels show as a chance with a bar; numbers show as a
+  value. Add `{"unit": "s"}` for seconds.
+- **The landing ring** is read from whichever layer gives the steadiest landing point - often an early one. Pass
+  `land_layer=` to choose yourself.
+- **The outlook** comes from a probe of the `outlook` label, when your recordings have it (recordings from RocketSim
+  or RLBot do). If your bot has a critic, you can use that instead (below).
+
+Make the pack from the very same network your bot runs - the pack names its layers by their path in that network.
+
+No names file yet? Pass features directly: `features={"lined up for a shot": 117}`. Or skip them and show only probes.
+
+### 2. Wrap your bot
+
+Where your bot starts - the line that says `MyBot("me/my-bot").run(...)` - wrap the class:
+
+```python
+from cds_interpret.overlay import with_thoughts
+
+if __name__ == "__main__":
+    with_thoughts(MyBot, pack="thoughts.npz", network="policy")("me/my-bot").run(wants_ball_predictions=True)
+```
+
+`MyBot` is your bot's class and `"me/my-bot"` its agent id (the one in its bot.toml); keep whatever your `run(...)`
+already passes. `wants_ball_predictions=True` lets the panel draw RLBot's own landing cross.
+
+`network` is the name of the attribute your bot keeps its torch network in (set in `initialize()`). Use a dotted name
+for a nested one (`"agent.actor"`), or leave it out and the toolkit picks the largest network it finds on your bot.
+
+Other options:
+
+| option | what it does |
+|---|---|
+| `panel="panel.toml"` | your own panel design - see [customize the panel](customize-the-panel.md) |
+| `hooks={"name": function}` | functions your panel file uses for custom rows or markers |
+| `critic="my_module:make_critic"` | use your critic for the outlook bar: `make_critic()` returns a function from inputs to values. It is loaded in the overlay's own process, never in your bot's |
+| `title=`, `x=`, `y=`, `draw_every=` | quick overrides of the panel's title, position and drawing rate |
+| `worker=False` | do the reading in your bot's process after the controls are sent (for debugging only) |
+
+A `Hivemind` bot works too; the panel follows its first car.
+
+### 3. Play
+
+Add your bot's `bot.toml` to RLBot, turn on **rendering** in the match settings, and start a match. The panel appears
+a second or two in, once the overlay's helper process has started; your bot plays from the very first tick.
+
+## Why it cannot change how your bot plays
+
+1. **It only listens.** The overlay copies your network's layers with read-only hooks while your bot's own forward
+   pass runs. Your bot's outputs stay bit-for-bit the same; the tests check it.
+2. **It works after your bot.** Everything else happens after your controls have been sent for that tick.
+3. **It works somewhere else.** The reading runs in a separate helper process at low priority, with one thread, so it
+   never competes with your bot's own threads. If the helper is busy, it simply skips a decision.
+4. **It never makes your bot wait.** Nothing is sent to the helper until it says it's ready, a separate thread does the
+   sending, and nothing is drawn on the same tick as a decision.
+5. **Mistakes switch it off, not your bot.** Any error in the overlay is written to the log once and the overlay stops.
+   Your bot keeps playing.
+
+## When the panel doesn't show
+
+**Nothing at all.** Turn on rendering in RLBot's match settings. Then give it a second or two after kickoff.
+
+**The bot's log says `cds-interpret: thoughts overlay off (...)`.** The reason is in the brackets. The common ones:
+
+```text
+cds-interpret: thoughts overlay off (... has no layer 'layers.3'. Did you mean: 'layers.2'? ...)
+```
+
+The pack was made from a different network than the one your bot runs. Make it with `ci.Policy(the_same_module, ...)`.
+
+```text
+cds-interpret: thoughts overlay off ([Errno 2] No such file or directory: 'thoughts.npz')
+```
+
+The path is relative to where RLBot starts your bot - usually its own folder. Use a full path, or one built from
+`Path(__file__).parent`.
+
+```text
+cds-interpret: thoughts overlay off (panel.toml [panel]: unknown key 'widht'. Did you mean 'width'? ...)
+```
+
+A typo in your panel file. Fix it and restart the match.
+
+**The landing ring jumps around.** Read it from a steadier layer: `study.steadiness(layer)` for each layer, or let
+`make_pack` pick (it does by default). See [probes you show live](probes.md#probes-you-show-live).
+
+More in [when something goes wrong](../troubleshooting.md#the-overlay).
