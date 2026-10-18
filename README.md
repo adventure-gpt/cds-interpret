@@ -11,7 +11,7 @@ lets you look inside it. You can ask it questions ("does it know the ball is abo
 it has learned on its own, switch one off to see what changes - and watch all of it live, on screen, while it plays.
 
 <p align="center">
-  <img src="assets/overlay-panel.svg" alt="The thoughts panel: outlook, next move, what it is noticing, and a few readings" width="300">
+  <img src="assets/overlay-panel.svg" alt="The thoughts panel: outlook, next move and why, what the move rests on, what it is noticing, and a few readings" width="300">
   <br><sub>The thoughts panel, drawn in the corner of the screen during a match. (Shown here outside the game.)</sub>
 </p>
 
@@ -103,6 +103,12 @@ network saw. The [quickstart](docs/quickstart.md) walks through both ways, step 
 - **Watch it think, live.** Wrap your RLBot bot in one line and its thoughts appear on screen while it plays: its
   outlook, its next move and how sure it is, what it is noticing, where it thinks the ball will land. It reads your
   network without changing it, so your bot plays exactly the same.
+  [Watch it think in RLBot](docs/howto/overlay.md).
+- **See why it makes each move, live.** "Why this move" names the ideas pushing the bot toward the move it's about
+  to make (and the one pushing against it); "Looking at" shows what that move rests on - its own car, the ball, the
+  opponents, the team-mates. [Why this move, and what it's looking at](docs/howto/why-and-looking.md).
+- **2v2 and 3v3 too.** Every car gets its own landing ring, and the panel follows the car you watch with the
+  spectator camera - or a fixed car, or one picked for the match. [Team modes](docs/howto/team-modes.md).
 - **Design your own panel.** Pick the rows, names, colours, size and position in a small TOML file, or draw your own
   rows in Python. [Customize the panel](docs/howto/customize-the-panel.md).
 - **Record games three ways.** In RocketSim against itself or a scripted opponent, in the real game through RLBot, or
@@ -135,6 +141,8 @@ network saw. The [quickstart](docs/quickstart.md) walks through both ways, step 
 | [See what a decision rests on](docs/howto/what-decisions-rest-on.md) | the ball, its car, the opponents; and what each feature does |
 | [Check your tools](docs/howto/check-your-tools.md) | how to tell when a technique is misleading you |
 | [Watch it think in RLBot](docs/howto/overlay.md) | the live thoughts overlay |
+| [Why this move, and what it's looking at](docs/howto/why-and-looking.md) | the panel's two rows about each decision: how to read them, what they cost |
+| [Team modes](docs/howto/team-modes.md) | 2v2 and 3v3: a ring for every car, a panel that follows the camera |
 | [Customize the panel](docs/howto/customize-the-panel.md) | every option of the panel's TOML file, and Python hooks |
 | [Reports and drawings](docs/howto/figures.md) | the HTML page, its sections, the drawings |
 | [See what it learns between checkpoints](docs/howto/track-training.md) | checkpoint after checkpoint, and what to practise next |

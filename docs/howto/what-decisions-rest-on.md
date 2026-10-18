@@ -58,6 +58,9 @@ On a large self-play bot (31 million weights), whose parts matter more separatel
 scored 0.46, swapping one part at a time 0.38, and the usual gradient methods (added up per part) 0.26 and 0.19. So
 use the parts, and check the score before you read a ranking.
 
+The same split runs live in the thoughts panel, for each move the bot makes: its "Looking at" row
+([why this move, and what it's looking at](why-and-looking.md)).
+
 The building blocks are there for your own groupings or for a critic's value: `attribution.FramesCodec(policy)` splits
 and rebuilds moments, and `pick_donors`, `coalition_table`, `shapley`, `occlusion`, `kl_table` and `faithfulness` do
 the rest. A group can be part of an entity (`Group("cars", role=ROLE_ME, fields=(...,))`), and any function of the
@@ -98,7 +101,8 @@ were about steering - which only their effects reveal.
 **Rank features by effect, not by size.** Removing each decision's three biggest features *by effect* moved the bot
 twice as much as removing its three most active ones (`EF.joint_ablation` measures any ranking this way). A cheaper
 estimate, `EF.attribution_patching` (gradient times contribution), ranked almost exactly like the exact effects
-(correlation 0.96), so it's the way to go on a big network.
+(correlation 0.96), so it's the way to go on a big network - and it's what the thoughts panel's "Why this move" row
+shows live, for your named features ([guide](why-and-looking.md)).
 
 **Choosing what to test in games.** Pick features to test by what they do on training games, then test them on
 held-out ones. On the large bot, the 20 features that pushed boosting most at demo chances, removed together, took a

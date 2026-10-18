@@ -3,6 +3,65 @@
 All notable changes to cds-interpret are written down here. The project follows
 [Semantic Versioning](https://semver.org); before 1.0, minor versions may change the API (each change is listed).
 
+## [0.2.0] - unreleased
+
+The live overlay in 2v2 and 3v3, and two new rows that say why the bot makes each move.
+
+### Added
+
+- **Team modes** ([guide](docs/howto/team-modes.md)). A landing ring for every car of your bot, each smoothed on its
+  own and joined to its own car (`[markers] landing_for`: `"all"`, `"panel"`, `"camera"`, `"none"` or car numbers
+  like `[1, 3]`), and one panel that follows a car by rules (`[panel] follow`, default `["camera", "last",
+  "random"]`): the car the host's camera follows (RLBot's `last_spectated`), else the last of yours it followed, else
+  one picked for the match - or `"first"`, a car number, or `"hide"`. A line under the title says whose thoughts
+  these are and why (`[panel] subtitle`, `""` for none). Every car keeps its own smoothing and held features. Works
+  for a Hivemind and for one copy of the bot per car alike: the copies find each other by agent id, agree on the
+  panel car from the packet, and only that copy draws the panel. `overlay.Follow`, `overlay.landing_cars`.
+- **"Why this move"** ([guide](docs/howto/why-and-looking.md)), a new row kind `why`: the named features pushing the
+  move the policy leans to hardest, and the one pushing hardest against it - each feature's activation x its decoder
+  direction . the gradient of the move's log-probability at the pack's layer (attribution patching), held a moment
+  like "Noticing". Options `max`, `min_push`, `strong`, `against`, `empty`, `features`; colours `push`,
+  `push_strong`, `push_against`. The word above the car can show the move's driver (`[markers] car_label_from`).
+- **"Looking at"**, a new row kind `looking`: exact Shapley shares of the move over the bot's own car, the ball, the
+  opponents and the team-mates, each swapped for the same part of real recorded moments through your bot's own obs
+  function, every combination in one batch, for the panel's car every few readings. Options `every`, `donors`,
+  `legend`, `words`; colours `own_car`, `ball`, `opponents`, `team_mates`.
+- **`with_thoughts(..., policy="module:factory")`**: your bot's `ci.Policy`, built in the worker process (never in
+  your bot's), for the two new rows; its critic, if any, also feeds the outlook bar. `overlay.Explainer`,
+  `overlay.load_policy`.
+- **Packs carry what the rows need** (format version 2; version 1 packs still load): `make_pack` keeps the named
+  features' decoder directions (`decoders=True`), `add_decoders(pack, sae)` adds them to an older pack (and refuses
+  an SAE the features didn't come from), `add_donors(pack, moments, n=32)` keeps real recorded moments per number of
+  cars. `Study.make_pack` adds both (`decoders=True`, `donors=32`).
+- **`cds-interpret check-panel panel.toml thoughts.npz --policy module:factory`** tries both rows with your policy
+  and times them on one thread (`overlay.try_readings`); `check_panel` says what custom `why` / `looking` rows lack.
+- **A panel that keeps its size** (`[panel] keep_size = true`): every row keeps room for its longest answer - the
+  move its `lines`, "Noticing" and "Why this move" their `max` (plus the "against" line), "Looking at" its bar from
+  the first draw - so nothing below ever moves and the panel never resizes. `keep_size = false` lets rows shrink.
+- The word above the panel's car in **its team's colour** (`[colors] team_blue`, `team_orange`);
+  `car_label_color` still sets one colour for it.
+- `RowDrawer.stacked` (a bar in coloured pieces), `RowDrawer.spans` (a line in several colours) and
+  `RowDrawer.blank` (room kept empty) for custom rows.
+- Pictures of the new panel, of a team-mode panel and of a 3v3 moment from above with every car's ring, drawn by the
+  overlay's own code (`scripts/render_panel.py`).
+
+### Changed
+
+- The default panel has two more rows, "Why this move" and "Looking at", between "Next move" and "Noticing". They take
+  no room unless the overlay can compute them (a pack that has what they need and `policy=`), so without `policy=` the
+  panel shows what it did - but, with `keep_size` on by default, rows keep room for their longest answer and the panel
+  is a little taller than in 0.1.
+- A Hivemind's panel follows the car on camera instead of always its first car; one-copy-per-car teams draw one
+  panel instead of one per copy, on top of each other.
+- The word above the car is in the car's team colour (it was the "notice" colour) and, with "why this move" on, names
+  the feature driving the move. `car_label_from = "noticing"` gives the 0.1 behaviour.
+- The worker's request and result carry the panel car's readings (`compute(..., explainer=)`; results have `notes`);
+  its ready message says what it can compute (`WorkerLink.hello`). A critic now gets the network's input in its own
+  shape (unchanged for the usual [n, D] input).
+- `RowSpec.max`, `empty` and `words` default per kind (`RowSpec("noticing").max` is still 3, `RowSpec("why").max` 2).
+- The demo bot's pack also names a few features after what they make it do, and its `bot.py` passes
+  `policy="cds_interpret.demo:policy"`, so every row shows on the demo.
+
 ## [0.1.0] - 2026-10-17
 
 The first public version: the interpretability toolkit of the Cat Distribution System, on its own, for any PyTorch

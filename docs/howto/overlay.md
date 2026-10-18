@@ -8,11 +8,18 @@ and, while it plays, a panel in the corner of the screen shows what its network 
 - **Outlook** - a bar from the middle. Green and to the right when the bot expects to score; red and to the left when
   it's in trouble.
 - **Next move** - the action it leans toward, in words, and how sure it is.
-- **Noticing** - the ideas (named features) firing right now. Each one stays on the list a moment after it stops, so
-  nothing flickers. The first one also floats above the car.
+- **Why this move** - the ideas (named features) pushing it toward that move, strongest first, and the one pushing
+  hardest against it.
+- **Looking at** - what the move rests on: its own car, the ball, the opponents, the team-mates, as one coloured bar.
+- **Noticing** - the ideas firing right now. Each one stays on the list a moment after it stops, so nothing flickers.
 - **Readings** - the probes you chose: a chance with a bar underneath, a time in seconds.
 - **On the field** - a bright blue ring with a crosshair where the network thinks the ball will come down, joined to
-  the car, and a white cross where RLBot's own prediction says it will.
+  the car (one for each of your bot's cars in 2v2 and 3v3), a white cross where RLBot's own prediction says it will,
+  and the idea driving the move floating above the car, in its team's colour.
+
+The panel keeps the same size the whole match: every row keeps room for its longest answer, so nothing jumps around
+while you read it. "Why this move" and "Looking at" need one more line in your bot's entry point -
+[see below](#why-this-move-and-looking-at).
 
 Your bot plays exactly the same with the panel as without it. [Here's why](#why-it-cannot-change-how-your-bot-plays).
 
@@ -60,6 +67,8 @@ A few things `make_pack` does for you:
   `land_layer=` to choose yourself.
 - **The outlook** comes from a probe of the `outlook` label, when your recordings have it (recordings from RocketSim
   or RLBot do). If your bot has a critic, you can use that instead (below).
+- **For "why this move" and "looking at"**, the pack also keeps each feature's decoder direction and 32 real moments
+  from your recordings (`decoders=`, `donors=` to change that).
 
 Make the pack from the very same network your bot runs - the pack names its layers by their path in that network.
 
@@ -88,16 +97,33 @@ Other options:
 |---|---|
 | `panel="panel.toml"` | your own panel design - see [customize the panel](customize-the-panel.md) |
 | `hooks={"name": function}` | functions your panel file uses for custom rows or markers |
+| `policy="my_module:make_policy"` | your bot's `ci.Policy` (the same network, with its obs function), built in the overlay's own process: switches on "why this move" and "looking at" ([how](why-and-looking.md)), and the outlook bar from its critic if it has one |
 | `critic="my_module:make_critic"` | use your critic for the outlook bar: `make_critic()` returns a function from inputs to values. It is loaded in the overlay's own process, never in your bot's |
+| `input_layer="actor"` | the module whose input is your observation, when your bot doesn't call the network itself on it (read for `critic=` and `policy=`) |
 | `title=`, `x=`, `y=`, `draw_every=` | quick overrides of the panel's title, position and drawing rate |
 | `worker=False` | do the reading in your bot's process after the controls are sent (for debugging only) |
 
-A `Hivemind` bot works too; the panel follows its first car.
+In 2v2 and 3v3 every car of your bot gets its own landing ring, and the panel shows the car you follow with the
+spectator camera - a `Hivemind` bot or one copy of your bot per car alike. [Team modes](team-modes.md) explains the
+choices (a fixed car, a random one, only while you watch).
 
 ### 3. Play
 
 Add your bot's `bot.toml` to RLBot, turn on **rendering** in the match settings, and start a match. The panel appears
 a second or two in, once the overlay's helper process has started; your bot plays from the very first tick.
+
+### Why this move and Looking at
+
+These two rows need your network in the overlay's helper process. Write a small function that builds your bot's
+`ci.Policy` - the same network with its weights, its obs function and its action table - and name it:
+
+```python
+with_thoughts(MyBot, pack="thoughts.npz", network="policy", policy="my_bot.interp:make_policy")
+```
+
+[Why this move, and what it's looking at](why-and-looking.md) shows the function, how to read both rows, and what
+they cost (a few milliseconds, in the helper process). Without `policy=` they stay hidden; the rest of the panel is
+the same.
 
 ## Why it cannot change how your bot plays
 
@@ -105,7 +131,8 @@ a second or two in, once the overlay's helper process has started; your bot play
    pass runs. Your bot's outputs stay bit-for-bit the same; the tests check it.
 2. **It works after your bot.** Everything else happens after your controls have been sent for that tick.
 3. **It works somewhere else.** The reading runs in a separate helper process at low priority, with one thread, so it
-   never competes with your bot's own threads. If the helper is busy, it simply skips a decision.
+   never competes with your bot's own threads. If the helper is busy, it simply skips a decision. With `policy=`, the
+   helper builds its own copy of your network for "why this move" and "looking at"; your bot's is never touched.
 4. **It never makes your bot wait.** Nothing is sent to the helper until it says it's ready, a separate thread does the
    sending, and nothing is drawn on the same tick as a decision.
 5. **Mistakes switch it off, not your bot.** Any error in the overlay is written to the log once and the overlay stops.
@@ -135,6 +162,12 @@ cds-interpret: thoughts overlay off (panel.toml [panel]: unknown key 'widht'. Di
 ```
 
 A typo in your panel file. Fix it and restart the match.
+
+**Two panels on top of each other in 2v2 or 3v3.** The copies of your bot don't recognise each other: start them all
+from the same `bot.toml`. See [team modes](team-modes.md#when-something-looks-wrong).
+
+**"Why this move" or "Looking at" doesn't show.** The bot's log says why when the overlay starts; usually `policy=`
+is missing, or the pack is from before 0.2. See [the rows' guide](why-and-looking.md#when-something-goes-wrong).
 
 **The landing ring jumps around.** Read it from a steadier layer: `study.steadiness(layer)` for each layer, or let
 `make_pack` pick (it does by default). See [probes you show live](probes.md#probes-you-show-live).

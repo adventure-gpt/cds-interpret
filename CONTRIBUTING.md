@@ -43,7 +43,7 @@ One module per technique, each usable on its own with plain arrays and tensors; 
 | `study.py` | `Study`, `ProbeResults`, `FeatureSet`: the high-level flow |
 | `report.py` | the HTML report and its section registry |
 | `viz/` | dependency-free SVG charts, field drawings, the feature gallery |
-| `overlay/` | the live thoughts overlay: `pack.py` (what is read), `panel.py` (how it is drawn, and its TOML config), `worker.py`, `bot.py` |
+| `overlay/` | the live thoughts overlay: `pack.py` (what is read), `panel.py` (how it is drawn, and its TOML config), `team.py` (whose thoughts in team modes, whose rings), `explain.py` ("why this move" and "looking at"), `worker.py`, `bot.py` |
 | `demo/` | the demo bot and the tour |
 | `_rlbot.py` | what the RLBot recorder and the overlay share |
 
@@ -75,7 +75,10 @@ One module per technique, each usable on its own with plain arrays and tensors; 
 - **The overlay**: what is read lives in the pack (`overlay/pack.py`); how it is drawn in `overlay/panel.py`. A new
   kind of panel row is a branch in `Panel._row`, a name in `ROW_KINDS`, a line in `panel_example.toml` and a row in
   `docs/howto/customize-the-panel.md`. Keep the rules of `overlay/bot.py`: read-only hooks, the work after the
-  controls are sent, nothing that can block the bot.
+  controls are sent, nothing that can block the bot. A reading that needs the network itself goes in
+  `overlay/explain.py`: it runs in the worker on the copy built from `policy=`, for the panel's car only, and turns
+  itself off with a note when it fails. With `keep_size` on, a row keeps the same height whatever it holds
+  (`RowDrawer.blank`), and `tests/test_overlay_team.py::test_panel_keeps_its_size` checks it.
 
 ## What a change needs
 

@@ -6,7 +6,8 @@ looks like this:
 <p align="center"><img src="../../assets/overlay-panel.svg" alt="The default thoughts panel" width="300"></p>
 
 You can change almost everything about it - which rows appear, their names and colours, when a feature counts as
-"firing", where the panel sits, how wide it is - with a small text file. No library code to edit.
+"firing", where the panel sits, how wide it is, whose thoughts it shows in 2v2 and 3v3 - with a small text file. No
+library code to edit.
 
 ## The two-minute version
 
@@ -72,8 +73,28 @@ check when it starts and writes what it finds to the bot's log.)
 | `hold` | `0.6` | seconds a feature stays listed after it stops firing, so the list doesn't flicker |
 | `draw_every` | `8` | frames between draws; 8 is 15 times a second |
 | `value_scale` | from the pack | the outlook value that fills its bar |
+| `keep_size` | `true` | every row keeps room for its longest answer, so the panel never changes size ([below](#a-panel-that-keeps-its-size)) |
+| `follow` | `["camera", "last", "random"]` | in 2v2 and 3v3, whose thoughts the panel shows ([team modes](team-modes.md#choosing-whose-thoughts-follow)) |
+| `subtitle` | `"car {car} of {cars} - {rule}"` | in 2v2 and 3v3, the line under the title; `""` for none ([team modes](team-modes.md#the-line-under-the-title-subtitle)) |
 
 Long text is always cut to fit the width (with a `~` at the end), so a narrow panel never spills over.
+
+### A panel that keeps its size
+
+A move that takes one line now and two lines a moment later, a "Noticing" list that grows from one feature to three:
+if the panel followed them, every row below would jump up and down while you read it. So by default each row keeps
+room for its longest answer - the move's `lines`, the `max` features of "Noticing" and "Why this move" (plus the line
+for the feature pushing against the move), and "Looking at" its bar and legend from the first draw. Rows that are
+always the same height (bars, numbers) need nothing. The panel is the same size the whole match.
+
+If you would rather have a compact panel that grows and shrinks with what it says, set:
+
+```toml
+[panel]
+keep_size = false
+```
+
+Lowering `lines` or `max` makes the panel shorter while keeping it steady.
 
 ### Colours: `[colors]`
 
@@ -89,6 +110,9 @@ Colours are `[red, green, blue]` or `[red, green, blue, alpha]`, each from 0 to 
 | `notice`, `notice_held` | a feature firing now, and one that stopped a moment ago |
 | `bar` | any bar without a colour of its own |
 | `divider` | the middle mark of a bar that grows from the middle |
+| `push`, `push_strong`, `push_against` | "Why this move": a feature pushing the move, pushing it hard, and the one pushing hardest against it |
+| `own_car`, `ball`, `opponents`, `team_mates` | "Looking at": the four parts of its bar and legend |
+| `team_blue`, `team_orange` | the word floating above the panel's car, by its team |
 
 The defaults keep every piece of text bright on a dark box; if you change them, keep it readable at a glance.
 
@@ -114,6 +138,8 @@ The kinds of row:
 |---|---|---|
 | `outlook` | a bar from the middle with a word: green and right when the bot expects to score, red and left when it is in trouble | `label`, `scale`, `words` (three: below, around, above the middle), `threshold` |
 | `action` | the move the policy leans toward, in words, and how sure it is | `label`, `lines` (how many lines the words may take) |
+| `why` | the named features pushing that move hardest, and the one pushing hardest against it ([guide](why-and-looking.md)) | `label`, `max`, `min_push`, `strong`, `against`, `empty`, `features` |
+| `looking` | what the move rests on - own car, ball, opponents, team-mates - as one coloured bar ([guide](why-and-looking.md)) | `label`, `every`, `donors`, `legend`, `words` (four: car, ball, opponents, team-mates) |
 | `noticing` | the named features firing right now | `label`, `max`, `empty` (what to say when nothing fires), `features` (which ones may appear) |
 | `probes` | every probe of the pack that doesn't have a row of its own, each in its natural style | - |
 | `bar` | a name, a percentage at the right, and a bar under the name | `source`, `label`, `color`, `scale` |
@@ -135,6 +161,25 @@ A row's `source` says what it shows:
 
 Bars always sit under their names, so a row never needs more width than its words.
 
+`why` and `looking` appear only when the overlay can work them out: the pack has what they need and the overlay was
+given your bot's policy (`with_thoughts(..., policy=...)`; [how](why-and-looking.md)). Without, they take no room at
+all - which is why the default rows can include them. Their keys:
+
+| key | row | default | what it does |
+|---|---|---|---|
+| `max` | why | `2` | how many features pushing the move to list |
+| `min_push` | why | `0.15` | the smallest push worth naming (log-probability: 0.7 roughly doubles the move's chance) |
+| `strong` | why | `0.6` | a push this big is highlighted; one this big against the move gets its `-` line |
+| `against` | why | `true` | show the feature pushing hardest against the move |
+| `empty` | why | `"no named idea"` | what to say when no named feature pushes it |
+| `features` | why | all | which features may appear |
+| `every` | looking | `4` | worked out every 4th reading (the overlay's heaviest reading) |
+| `donors` | looking | `3` | recorded moments each reading compares with: more is steadier and slower |
+| `legend` | looking | `true` | the words and percentages under the bar |
+| `words` | looking | `["car", "ball", "opp", "mates"]` | the legend's words |
+
+To turn one off, leave it out of your `[[rows]]`; then it isn't worked out at all.
+
 ### Features: `[features."name"]`
 
 One table per named feature, by the name it has in the pack:
@@ -155,15 +200,17 @@ little like what you named it for. Pick it from the feature's sizes: your names 
 
 | key | default | what it does |
 |---|---|---|
-| `landing` | `true` | a ring with a crosshair where the bot's own layer thinks the ball will land |
+| `landing` | `true` | a ring with a crosshair where the bot's own layer thinks the ball will land (`false`: no rings at all) |
+| `landing_for` | `"all"` | whose rings in 2v2 and 3v3: `"all"` your bot's cars, `"panel"`, `"camera"`, `"none"`, or car numbers like `[1, 3]` ([team modes](team-modes.md#choosing-whose-rings-landing_for)) |
 | `landing_color` | `[0, 170, 255]` | its colour |
 | `landing_radius` | `150.0` | its size in unreal units (the ball's radius is about 93) |
-| `landing_line` | `true` | a line from the car to the ring |
+| `landing_line` | `true` | a line from each car to its own ring |
 | `landing_smooth` | `0.25` | seconds of smoothing, so the ring glides instead of jumping (`0`: none) |
 | `prediction` | `true` | a white cross where RLBot's ball prediction says the ball will land |
 | `prediction_color` | white | its colour |
-| `car_label` | `true` | the first firing feature's name, floating above the car |
-| `car_label_color` | the `notice` colour | its colour |
+| `car_label` | `true` | a feature's name floating above the panel's car |
+| `car_label_from` | `"why"` | `"why"`: the feature driving the move hardest, else the first one firing; `"noticing"`: the first one firing |
+| `car_label_color` | the car's team colour | one colour for it, whatever the team (a feature's own `color` is used when its style has one) |
 | `hook` | none | your own 3D drawing (below) |
 
 ## Your own rows and markers in Python
@@ -191,9 +238,11 @@ def boost_row(draw, thoughts, state):
 with_thoughts(MyBot, pack="thoughts.npz", panel="panel.toml", hooks={"boost_row": boost_row})(...)
 ```
 
-`draw` has four tools: `line(left, right=None, left_color=None, right_color=None, indent=0.0)`,
-`bar(fraction, color=None, centred=False)`, `gap(lines=0.2)`, and `color(r, g, b, a=255)` (or `named("bad")` for a
-colour of your config). Text is cut to the panel's width for you.
+`draw` has these tools: `line(left, right=None, left_color=None, right_color=None, indent=0.0)`,
+`bar(fraction, color=None, centred=False)`, `stacked([(fraction, color), ...])` (one bar in coloured pieces),
+`spans([(text, color), ...])` (one line of text in several colours), `blank(lines=1)` (the room of some lines of
+text, left empty - to keep your row the same height), `gap(lines=0.2)`, and `color(r, g, b, a=255)` (or
+`named("bad")` for a colour of your config). Text is cut to the panel's width for you.
 
 `thoughts` holds everything the panel knows this decision:
 
@@ -203,7 +252,9 @@ colour of your config). Text is cut to the panel's width for you.
  "features": [{"name": "lined up for a shot", "act": 1.9, "on": True}, ...],
  "probes": {"First to the ball": 0.74, "Time to the ball": 1.3},
  "looks": {"First to the ball": {"unit": "%", "color": None}, ...},
- "land_xy": [x, y]}                                      # the landing guess in the team's frame, when the pack has one
+ "land_xy": [x, y],                                      # the landing guess in the team's frame, when the pack has one
+ "why": [{"name": "lined up for a shot", "push": 0.92}, ...],   # with policy=, for the panel's car
+ "looking": {"own car": 0.46, "ball": 0.38, "opponents": 0.16}}  # with policy=, every few readings
 ```
 
 A marker hook draws in 3D with RLBot's renderer. It runs inside the same render group as the panel. Name it in the
@@ -217,7 +268,8 @@ hook = "my_markers"
 
 ```python
 def my_markers(renderer, flat, thoughts, info):
-    """info: {"car_index", "team", "landing_true", "landing_think"}."""
+    """info: {"car_index", "team", "landing_true", "landing_think", "marks"} (marks: a landing guess per car,
+    [(car index, (x, y))])."""
     if any(f["on"] for f in thoughts["features"] if f["name"] == "threat on goal"):
         renderer.draw_string_3d("DEFEND", flat.CarAnchor(info["car_index"], flat.Vector3(0, 0, 200)), 2.0,
                                 flat.Color(240, 90, 80, 255))

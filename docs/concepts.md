@@ -126,6 +126,11 @@ layer. While your bot plays, a hook copies that layer (without changing it), a s
 pack from it, and a panel in the corner of the screen shows the result. [The overlay guide](howto/overlay.md) has the
 details, and [you can design the panel yourself](howto/customize-the-panel.md).
 
+Two of its rows go one step further and explain each move as it happens, with the same ideas as the rest of this
+page: which named features push the move (their effect, estimated from the gradient), and what the move rests on -
+its own car, the ball, the opponents - by swapping each part for one from a recorded moment
+([why this move, and what it's looking at](howto/why-and-looking.md)).
+
 ## Reading results well
 
 - **Ten games or more.** Scores from a handful of games are rough, especially for rare events like demos.

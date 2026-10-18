@@ -269,11 +269,14 @@ with_thoughts(MyBot, pack="thoughts.npz", network="policy")("me/my-bot").run(wan
 
 Turn on rendering in RLBot and start a match. [The overlay guide](howto/overlay.md) has the details, and
 `examples/rlbot_demo_bot` is a complete bot folder to try first (it's in the repository, not in the pip install:
-`git clone https://github.com/adventure-gpt/cds-interpret` gets it).
+`git clone https://github.com/adventure-gpt/cds-interpret` gets it). In 2v2 and 3v3 every car gets its own landing
+ring and the panel follows the car you watch ([team modes](howto/team-modes.md)). Add `policy=` to see *why* it makes
+each move as well ([why this move, and what it's looking at](howto/why-and-looking.md)).
 
 ## Where next
 
 - [How it works](concepts.md) - what every number means, and how to read them without fooling yourself.
 - [Name your bot's features](howto/name-features.md) - the full loop, from numbers to names you trust.
 - [Customize the panel](howto/customize-the-panel.md) - make the overlay your own.
+- [Why this move, and what it's looking at](howto/why-and-looking.md) - the panel's two rows about each decision.
 - [Coming from rlgym-ppo or GigaLearn](coming-from.md).

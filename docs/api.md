@@ -121,7 +121,7 @@ inputs (or uses the recorded ones), computes missing labels, picks the layers an
 | `edits(layer, {name: edit})` | `{name: {"kl", "argmax_changed", "tv"}}` on the held-out moments |
 | `probe_edit(layer, label, factor=0.0)`, `feature_edit(layer, features, scale=0.0)` | edits (`features`: numbers or confirmed names) |
 | `steadiness(layer, labels=("land_x", "land_y"))` | `probes.readout_stability` of labels read together |
-| `make_pack(layer, features=None, probes=None, land_layer=None, title="THOUGHTS", value_scale=1.0, outlook=True, names=None)` | a thoughts pack (`names`: a names file whose confirmed names become its features) |
+| `make_pack(layer, features=None, probes=None, land_layer=None, title="THOUGHTS", value_scale=1.0, outlook=True, names=None, decoders=True, donors=32)` | a thoughts pack (`names`: a names file whose confirmed names become its features; `decoders` / `donors`: what the panel's "why this move" and "looking at" need) |
 | `suggest_names(layer, top=24)` | a suggested name for each top feature (`names.Suggestion`) |
 | `feature_gallery(layer, path="features.html", features=None, n=24, exclude_kickoffs=False)` | a page of each feature's strongest moments |
 | `check_feature(layer, feature, scales=(0.0, 3.0))` | `FeatureCheck`: the feature (a number or a confirmed name) turned off and up, and what changes |
@@ -277,16 +277,28 @@ Each function's docstring gives its arguments and what it returns.
 
 ## The overlay
 
-`cds_interpret.overlay` - [how-to](howto/overlay.md)
+`cds_interpret.overlay` - how-tos: [the overlay](howto/overlay.md), [why this move and looking at](howto/why-and-looking.md),
+[team modes](howto/team-modes.md)
 
 | | |
 |---|---|
-| `make_pack(layer, sae=None, features=None, thresholds=None, probes=None, actions=None, output="logits", output_layer="", title="THOUGHTS", value_scale=1.0, outlook_probe=None)` | a pack from parts you made yourself (`probes`: {name: (LinearProbe, look)}). `Study.make_pack` makes one from a study, with `probes` as {name: label} |
+| `make_pack(layer, sae=None, features=None, thresholds=None, probes=None, actions=None, output="logits", output_layer="", title="THOUGHTS", value_scale=1.0, outlook_probe=None, meta=None, decoders=True)` | a pack from parts you made yourself (`probes`: {name: (LinearProbe, look)}; `decoders`: keep each named feature's decoder direction). `Study.make_pack` makes one from a study, with `probes` as {name: label} |
 | `add_land(pack, module, w [D, 2], b [2])` | the landing marker from its own layer |
-| `save_pack(pack, path)`, `load_pack(path)` | `.npz`, no pickles |
-| `Thoughts(pack)` | `read(h, output)` (h: the pack layer's values), `land_xy(h_land)` (the values of the layer named in `pack["land"]["module"]`, which may be another layer), `outlook_value(h)` |
-| `with_thoughts(BotClass, pack, network=None, panel=None, hooks=None, input_layer="", critic=None, worker=True, title=None, draw_every=None, x=None, y=None)` | your RLBot v5 bot class with the overlay |
-| `draw_thoughts(renderer, flat, th, ...)`, `smooth_point(prev, new, dt)` | the panel, for your own drawing code |
+| `add_decoders(pack, sae)` | the named features' decoder directions, for "why this move" (refuses an SAE the features didn't come from) |
+| `add_donors(pack, moments, me=None, n=32, seed=0, skip_kickoffs=True)` | up to `n` real recorded moments per number of cars (a Moments, a list of them, or Frames with `me`), for "looking at" |
+| `save_pack(pack, path)`, `load_pack(path)` | `.npz`, no pickles (format version 2; version 1 packs load) |
+| `Thoughts(pack)` | `read(h, output)` (h: the pack layer's values), `land_xy(h_land)` (the values of the layer named in `pack["land"]["module"]`, which may be another layer), `outlook_value(h)`, `names`, `fd` [F, D] decoder directions (or None), `donors` [(Frames, me)], `donor_cars()` |
+| `with_thoughts(BotClass, pack, network=None, panel=None, hooks=None, input_layer="", critic=None, worker=True, title=None, draw_every=None, x=None, y=None, policy=None)` | your RLBot v5 bot class (a Bot or a Hivemind) with the overlay. `policy`: `"module:factory"` returning your `ci.Policy`, built in the worker, for "why this move" and "looking at" (a Policy object with `worker=False`) |
+| `Explainer(thoughts, policy, seed=0, freeze=True)` | the two decision readings: `why(x, h, action, acts=None)` -> [{"name", "push"}], `looking(state, me, action, donors=3)` -> {part: share}; `available`, `notes` |
+| `load_policy(spec)`, `try_readings(pack, policy, donors=3)` | a Policy from `"module:factory"`; both readings tried on the pack's own moments: {"why_ms", "looking_ms", "problems"} |
+| `Follow(rules=("camera", "last", "random"), seed=0)` | team modes: `pick(ours, spectated)` -> (player index or None, rule), `update(ours, spectated)` every packet |
+| `landing_cars(landing_for, ours, panel_car, spectated)` | which cars get a landing ring |
+| `draw_thoughts(renderer, flat, th, ..., marks=None, subtitle=None, available=None, team=None)`, `smooth_point(prev, new, dt)` | the panel, for your own drawing code |
+
+`cds_interpret.overlay.explain`: `why_pushes(policy, module, x, h, action, acts, directions)` and
+`looking_shares(policy, codec, live, me, action, dparts, dsig, donors=3, rng=None)`, the two readings as plain
+functions. `cds_interpret.overlay.team`: `check_follow`, `check_landing_for`, `check_subtitle`, `subtitle_text`,
+`car_number`, `match_seed`, `RULE_WORDS`.
 
 ## The panel
 
@@ -294,13 +306,14 @@ Each function's docstring gives its arguments and what it returns.
 
 | | |
 |---|---|
-| `PanelConfig(...)`, `PanelConfig.load(path)`, `PanelConfig.from_dict(d)` | the whole panel: `title`, `x`, `y`, `width`, `text_scale`, `title_scale`, `smoothing`, `hold`, `draw_every`, `value_scale`, `colors`, `markers`, `features`, `rows` |
-| `RowSpec(kind, label, source, color, scale, format, text, lines, max, empty, features, words, threshold, height, hook)` | one row; kinds: outlook, action, noticing, probes, bar, percent, seconds, value, centred, text, spacer, custom |
-| `FeatureStyle(label, threshold, show, color)`, `Markers(...)` | a feature's look; the 3D markers |
-| `Panel(config, hooks=None)` | ready to draw: `draw(renderer, flat, thoughts, car_index, landing_true, landing_think, state, frame)` |
-| `RowDrawer` | what a custom row hook draws with: `line()`, `bar()`, `gap()`, `color()`, `named()` |
-| `check_panel(config, pack)` | what in a config doesn't match a pack (rows, styles and lists naming probes or features it doesn't have), in words; `[]` when all is well |
-| `WorkerLink(target, *args)`, `compute(thoughts, msg, critic=None)` | the worker process and what it computes |
+| `PanelConfig(...)`, `PanelConfig.load(path)`, `PanelConfig.from_dict(d)` | the whole panel: `title`, `x`, `y`, `width`, `text_scale`, `title_scale`, `smoothing`, `hold`, `draw_every`, `value_scale`, `keep_size`, `follow`, `subtitle`, `colors`, `markers`, `features`, `rows`; `rows_of(kind)`, `wants` (what it asks the worker for) |
+| `RowSpec(kind, label, source, color, scale, format, text, lines, max, empty, features, words, threshold, height, hook, min_push, strong, against, every, donors, legend)` | one row; kinds: outlook, action, why, looking, noticing, probes, bar, percent, seconds, value, centred, text, spacer, custom |
+| `FeatureStyle(label, threshold, show, color)` | a feature's look |
+| `Markers(landing, landing_for, landing_color, landing_radius, landing_line, landing_smooth, prediction, prediction_color, car_label, car_label_from, car_label_color, hook)` | the 3D markers; `landing_cars` ("none" when `landing` is off) |
+| `Panel(config, hooks=None)` | ready to draw: `draw(renderer, flat, thoughts, car_index, landing_true, landing_think, state, frame, value_scale, team, marks=None, subtitle=None, available=None)` (thoughts None: only the markers) |
+| `RowDrawer` | what a custom row hook draws with: `line()`, `bar()`, `stacked()`, `spans()`, `blank()`, `gap()`, `color()`, `named()` |
+| `check_panel(config, pack)` | what in a config doesn't match a pack (rows, styles and lists naming probes or features it doesn't have; why / looking rows of your own without what they need), in words; `[]` when all is well |
+| `WorkerLink(target, *args)`, `compute(thoughts, msg, critic=None, explainer=None)` | the worker process (`hello`: its ready message, with what it can compute) and what it computes |
 
 ## The study page and figures
 
@@ -330,5 +343,6 @@ module or raises `MissingDependency`.
 
 `cds-interpret demo [--out cds-demo] [--source auto|rocketsim|synthetic] [--games 12] [--seconds 60] [--threads 2]`,
 `cds-interpret doctor`, `cds-interpret panel [panel.toml] [--force]` (writes an example panel config),
-`cds-interpret check-panel panel.toml [thoughts.npz]` (checks a panel config, and against a pack),
+`cds-interpret check-panel panel.toml [thoughts.npz] [--policy module:factory]` (checks a panel config, against a
+pack, and with `--policy` tries "why this move" and "looking at" and times them),
 `cds-interpret --version`; also `python -m cds_interpret`.

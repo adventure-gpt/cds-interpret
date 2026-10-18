@@ -198,12 +198,26 @@ Its name doesn't match the pack exactly - names are case-sensitive, and a probe 
 `make_pack`. `cds-interpret check-panel panel.toml thoughts.npz` lists every mismatch with what you probably meant;
 the overlay also writes them to the bot's log when it starts.
 
+**Two panels on top of each other in 2v2 or 3v3.**
+The copies of your bot don't recognise each other as the same bot, so each draws a panel. Start them all from the
+same `bot.toml` (the same agent id). See [team modes](howto/team-modes.md#when-something-looks-wrong).
+
+**The panel shows a car I'm not watching.**
+RLBot tells bots only which player the host's camera followed *most recently*, and says player 0 before anything was
+followed. Follow the car you want once; on the free camera the panel stays on the last car you followed.
+[What RLBot can and can't tell](howto/team-modes.md#what-rlbot-can-and-cant-tell-the-overlay).
+
+**"Why this move" or "Looking at" doesn't show.**
+The bot's log says why when the overlay starts. Usually `policy=` is missing from `with_thoughts`, or the pack is from
+before 0.2 and lacks what the rows need. `cds-interpret check-panel panel.toml thoughts.npz --policy
+my_bot.interp:make_policy` says which, and how to add it. [The rows' guide](howto/why-and-looking.md#when-something-goes-wrong).
+
 **The landing ring jumps around.**
 Read it from a steadier layer: `study.steadiness(layer)` compares layers, and `make_pack` picks the steadiest by
 itself. See [probes you show live](howto/probes.md#probes-you-show-live).
 
 **My bot feels slower with the overlay.**
-The overlay adds two read-only listeners to your bot's network and nothing else to its decision. All the rest runs
+The overlay adds a few read-only listeners to your bot's network and nothing else to its decision. All the rest runs
 in a low-priority helper process after your controls are sent, and nothing is drawn on a decision's tick. If your
 computer is already fully busy (training in the background, say), compare with the overlay off: that's the honest
 test.
