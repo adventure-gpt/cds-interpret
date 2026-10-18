@@ -1,0 +1,8 @@
+#:schema https://rlbot.org/schemas/script.json
+# The demo bot's thoughts drawn by a script, display only: add this file to the match as a SCRIPT, beside the plain
+# demo bot (../rlbot_demo_bot/bot.toml). Install cds-interpret[rlbot] in the Python that `python` runs.
+[settings]
+name = "CDS demo bot thoughts (watched)"
+run_command = "python watch.py"
+run_command_linux = "python3 watch.py"
+agent_id = "cds-interpret/watch-demo-bot"

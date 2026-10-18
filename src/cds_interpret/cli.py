@@ -81,6 +81,24 @@ def main(argv: list[str] | None = None) -> int:
     ck.add_argument("pack", nargs="?", help="the thoughts pack it will show (a .npz file)")
     ck.add_argument("--policy", help="\"package.module:factory\" as you give it to with_thoughts(policy=...): also try "
                                      "'why this move' and 'looking at' with it, and time them")
+    wt = sub.add_parser("watch-template", help="write a display-only RLBot script that shows the thoughts of a bot "
+                                               "you can't modify")
+    wt.add_argument("folder", nargs="?", default="watch", help="where to write it (default: watch)")
+    wt.add_argument("--force", action="store_true", help="overwrite files that exist")
+    rf = sub.add_parser("refit-pack", help="carry a thoughts pack over to a newer checkpoint of the same bot")
+    rf.add_argument("pack", help="the old pack (a .npz file)")
+    rf.add_argument("--policy", required=True, help="the NEW checkpoint: \"package.module:factory\" returning its "
+                                                     "cds_interpret.Policy")
+    rf.add_argument("--old-policy", required=True, help="the checkpoint the old pack was made for, the same way")
+    rf.add_argument("--out", required=True, help="a folder for the new pack and every step's result")
+    rf.add_argument("--moments", help="a recording to use (a folder) instead of recording games in RocketSim")
+    rf.add_argument("--games", type=int, default=24, help="games to record in RocketSim (default 24)")
+    rf.add_argument("--seconds", type=float, default=90.0, help="seconds per game (default 90)")
+    rf.add_argument("--team-size", type=int, default=1, help="cars per team in the recorded games (default 1)")
+    rf.add_argument("--opponent", default="chaser", help="who it plays: self, chaser or idle (default chaser)")
+    rf.add_argument("--min-r", type=float, default=0.5, help="how closely a new feature must fire with an old one "
+                                                             "to take its name (default 0.5)")
+    rf.add_argument("--threads", type=int, default=2, help="CPU threads for torch (default 2)")
     ap.add_argument("--version", action="store_true", help="print the version")
     args = ap.parse_args(argv)
     if args.version:
@@ -128,6 +146,29 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f"{args.path} is fine" + (f", and everything it shows is in {args.pack}." if args.pack else
                                          ". (Name your pack too, to check the rows' probes and features are in it.)"))
+        return 0
+    if args.cmd == "watch-template":
+        from .errors import CDSInterpretError
+        from .overlay.watch import write_template
+        try:
+            written = write_template(args.folder, args.force)
+        except CDSInterpretError as e:
+            print(e)
+            return 1
+        print("Wrote " + " and ".join(written) + ". Edit the three lines marked EDIT in watch.py, then add "
+              "watch.script.toml to your match as a script (docs/howto/watch-a-bot.md).")
+        return 0
+    if args.cmd == "refit-pack":
+        import torch
+        torch.set_num_threads(max(1, args.threads))
+        from .errors import CDSInterpretError
+        from .refit import refit_pack
+        try:
+            refit_pack(args.pack, args.policy, args.old_policy, args.out, moments=args.moments, games=args.games,
+                       seconds=args.seconds, team_size=args.team_size, opponent=args.opponent, min_r=args.min_r)
+        except CDSInterpretError as e:
+            print(e)
+            return 1
         return 0
     if args.cmd == "demo":
         import torch

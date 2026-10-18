@@ -50,3 +50,12 @@ def test_rlbot_demo_bot_with_and_without_thoughts():
     assert any(c[0] == "draw_string_2d" for c in shown.renderer.calls)
     assert isinstance(mod.bot_class(["--thoughts", "--record"]), type)
     torch.set_num_threads(2)
+
+
+def test_watch_a_bot_example_builds_its_script():
+    pytest.importorskip("rlbot")
+    mod = _load(ROOT / "examples" / "watch_a_bot" / "watch.py", "watch_example")
+    if not mod.PACK.exists():
+        pytest.skip("the demo bot's thoughts.npz has not been made")
+    cls = mod.watch_thoughts(mod.POLICY, mod.PACK, cars=mod.CARS)
+    assert isinstance(cls, type) and hasattr(cls, "handle_packet")

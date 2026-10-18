@@ -9,6 +9,7 @@ with_thoughts(BotClass, pack)      your RLBot v5 bot class with the overlay (nee
 PanelConfig / Panel                how the panel looks: rows, names, colours, markers, team modes (a TOML file)
 Follow / landing_cars              team modes: whose thoughts the panel shows, which cars get a landing marker
 Explainer / try_readings           "why this move" and "looking at" for one decision; trying them on a pack
+watch_thoughts(policy, pack, cars) a display-only RLBot script: the thoughts of a bot you can't modify
 draw_thoughts                      the panel itself, for your own drawing code
 =================================  ==============================================================================
 
@@ -31,6 +32,7 @@ from .panel import (
     smooth_point,
 )
 from .team import Follow, landing_cars
+from .watch import match_cars, watch_thoughts
 from .worker import WorkerLink, compute
 
 __all__ = [
@@ -54,8 +56,10 @@ __all__ = [
     "load_pack",
     "load_policy",
     "make_pack",
+    "match_cars",
     "save_pack",
     "smooth_point",
     "try_readings",
+    "watch_thoughts",
     "with_thoughts",
 ]
