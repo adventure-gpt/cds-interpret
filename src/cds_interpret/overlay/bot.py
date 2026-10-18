@@ -17,7 +17,10 @@ Why it cannot change how your bot plays:
    decision;
 3. nothing is drawn on the tick of a decision, and nothing is sent to the worker before it has started (a request
    bigger than the pipe's buffer would otherwise wait - in the bot - for a worker still loading);
-4. any error in the overlay switches it off and is logged; your bot plays on.
+4. an error in one frame is logged and the overlay carries on with the next (the first few, then every 200th, with
+   the traceback; ``error_log=`` copies them to a file); only a long run of failures in a row switches it off, and
+   then it takes its drawing down. A worker that stops is started again (three times at most). Your bot plays on
+   whatever happens, and packets without a ball (the replay after a goal) are skipped.
 
 Team modes: the panel shows one of your bot's cars, chosen by the panel's ``follow`` rules (the car the host's camera
 follows, by default; see :mod:`cds_interpret.overlay.team`), and every car gets its own landing marker. A Hivemind's
@@ -30,6 +33,7 @@ your bot runs (its module paths name its layers).
 
 from __future__ import annotations
 
+import contextlib
 import os
 from collections.abc import Callable
 from dataclasses import replace
@@ -39,8 +43,10 @@ import numpy as np
 import torch
 
 from .._rlbot import (
+    FrameGuard,
     _log,
     find_network,
+    has_ball,
     landing_point,
     our_cars,
     our_indices,
@@ -56,6 +62,13 @@ from .team import Follow, landing_cars, match_seed, subtitle_text
 from .worker import WorkerLink, compute, load_critic, serve
 
 STALE = 0.5                             # seconds without a draw after which a car's smoothing starts afresh
+MAX_FAILED_FRAMES = 600                 # frames failing IN A ROW (5 s) before the overlay switches itself off
+MAX_FAILED_READINGS = 50                # the worker's answers failing in a row before it does
+MAX_RESTARTS = 3                        # times a worker that stopped is started again
+
+
+class GiveUp(RuntimeError):
+    """The overlay switches itself off (too many failures in a row, a worker that keeps stopping)."""
 
 
 def _rows(tap: LayerTap, key: str, flat: bool = True) -> np.ndarray | None:
@@ -83,7 +96,7 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
                   panel: str | os.PathLike[str] | PanelConfig | None = None, hooks: dict[str, Callable] | None = None,
                   input_layer: str = "", critic: str | None = None, worker: bool = True, title: str | None = None,
                   draw_every: int | None = None, x: float | None = None, y: float | None = None,
-                  policy: Any = None) -> type:
+                  policy: Any = None, error_log: str | os.PathLike[str] | None = None) -> type:
     """Your RLBot v5 bot class (a ``rlbot.managers.Bot`` or ``Hivemind`` subclass) with the thoughts overlay.
 
     Args:
@@ -104,6 +117,7 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
         policy: ``"package.module:factory"`` - factory() returns a ``cds_interpret.Policy`` of the same network
             (with its obs function), built in the worker process - for the "why this move" and "looking at" rows
             (docs/howto/why-and-looking.md). With ``worker=False`` it may also be a Policy.
+        error_log: a file the overlay also writes its errors to (with tracebacks), besides your bot's log.
     """
     pack_path = os.fspath(pack)
     if worker and policy is not None and not isinstance(policy, str):
@@ -160,7 +174,10 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
                       "(docs/howto/why-and-looking.md)", "info")
         bot._cds_th_state = {"cars": {}, "drawn": -10 ** 9, "think": {}, "draw": {}, "sent": 0, "pending": None,
                              "follow": Follow(conf.follow), "seeded": False, "wants": wants, "cleared": True,
-                             "warned_rows": False}
+                             "warned_rows": False, "restarts": 0,
+                             "guard": FrameGuard(bot, "thoughts overlay", MAX_FAILED_FRAMES, log_file=error_log),
+                             "worker_guard": FrameGuard(bot, "thoughts overlay's worker", MAX_FAILED_READINGS,
+                                                        log_file=error_log)}
         bot._cds_th_scale = float(pk["meta"].get("value_scale", 1.0))
         if hasattr(bot, "update_rendering_status"):
             bot.update_rendering_status(True)
@@ -186,6 +203,44 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
             st["cars"][car] = r
 
     def after(bot: Any, packet: Any) -> None:
+        """One frame of the overlay; an error is logged and the next frame goes on (see the module's notes)."""
+        st = bot._cds_th_state
+        frame = getattr(getattr(packet, "match_info", None), "frame_num", "?")
+        try:
+            if _after(bot, packet):                     # (a run of failures ends with a frame drawn well)
+                st["guard"].ok()
+        except GiveUp:
+            take_down(bot)
+            raise
+        except Exception as e:
+            if st["guard"].failed(frame, e):
+                take_down(bot)
+                raise RuntimeError(f"{MAX_FAILED_FRAMES} frames in a row failed; the last: {e!r}") from e
+
+    def take_down(bot: Any) -> None:
+        """The overlay's drawing off the screen (when it switches itself off: a frozen panel would mislead)."""
+        with contextlib.suppress(Exception):          # (nothing more to do: the overlay is going off anyway)
+            bot.renderer.clear_render_group(GROUP)
+
+    def check_worker(bot: Any) -> None:
+        """A worker process that stopped is started again, a few times at most."""
+        link, st = bot._cds_th_link, bot._cds_th_state
+        if link is None or link.alive:
+            return
+        if st["restarts"] >= MAX_RESTARTS:
+            raise GiveUp(f"the overlay's worker stopped {MAX_RESTARTS + 1} times")
+        st["restarts"] += 1
+        st["guard"].write(f"cds-interpret: thoughts overlay: its worker stopped (exit code {link.proc.exitcode}); "
+                          f"starting it again ({st['restarts']} of {MAX_RESTARTS})")
+        bot._cds_th_link = WorkerLink(serve, pack_path, critic, policy)
+        st["pending"] = None
+        st["worker_guard"].ok()                         # (a fresh worker, a fresh count)
+
+    def _after(bot: Any, packet: Any) -> bool:
+        """The frame's work; True when it drew."""
+        if not has_ball(packet):                        # (the replay after a goal: nothing to read)
+            return False
+        check_worker(bot)
         got: dict[str, np.ndarray] = {}
         for t in bot._cds_th_taps:
             for k in t.layers:
@@ -214,12 +269,15 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
                           "rows are matched to its cars in order (a Hivemind should run its cars in `indices` order)")
             k = cars.index(panel_car) if panel_car in cars else None
             msg: dict[str, Any] = {"frame": frame, "layer": got["h"], "output": got.get("y"), "obs": got.get("x"),
-                                   "land_h": got.get("land_h"), "panel": k}
+                                   "land_h": got.get("land_h"), "panel": k, "cars": list(cars)}
+            if policy is not None:                      # (the game state: for "looking at" and a mirroring bot)
+                msg["state"] = packet_row(packet)
             if k is not None:
                 msg["why"] = wants["why"]
                 due = wants["looking"] and st["sent"] % max(1, int(wants["every"])) == 0
                 if due:
-                    msg.update(looking=True, state=packet_row(packet), me=int(panel_car), donors=wants["donors"])
+                    msg.update(looking=True, me=int(panel_car), donors=wants["donors"])
+                    msg.setdefault("state", packet_row(packet))
             link = bot._cds_th_link
             if link is None:
                 crit, ex = bot._cds_th_inline
@@ -232,8 +290,11 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
             r = bot._cds_th_link.poll()
             if r is not None and "cars" in r:
                 store(bot, r, st["pending"] or mine)
-            elif r is not None and "error" in r:
-                raise RuntimeError(f"the overlay's worker failed: {r['error']}")
+                st["worker_guard"].ok()
+            elif r is not None and "error" in r:                # (one bad reading: logged, the panel goes on)
+                if st["worker_guard"].failed(frame, RuntimeError(f"the overlay's worker: {r['error']}")):
+                    raise GiveUp(f"{MAX_FAILED_READINGS} of the worker's readings in a row failed; the last: "
+                                 f"{r['error']}")
             if bot._cds_th_link.ready and bot._cds_th_link.hello.get("notes"):
                 for note in bot._cds_th_link.hello.pop("notes"):
                     _log(bot, f"cds-interpret overlay: {note}")
@@ -245,7 +306,7 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
         if decided and frame - st["drawn"] < 3 * every:  # (a bot deciding every tick is drawn now and then)
             due = False
         if not st["cars"] or not due or not bot.renderer.can_render:
-            return
+            return False
         dt = (frame - st["drawn"]) / 120.0
         st["drawn"] = frame
         markers = pnl.config.markers
@@ -267,7 +328,7 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
             if not st["cleared"]:                       # (this copy no longer shows anything: take its drawing down)
                 bot.renderer.clear_render_group(GROUP)
                 st["cleared"] = True
-            return
+            return True
         st["cleared"] = False
         from rlbot import flat
         cross = th is not None or (panel_car is None and first_of_team)
@@ -280,6 +341,7 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
         pnl.draw(bot.renderer, flat, th, car_index=panel_car, landing_true=true, state=state, frame=frame,
                  value_scale=bot._cds_th_scale, team=int(bot.team), marks=marks, subtitle=sub,
                  available=available(bot, len(packet.players)))
+        return True
 
     def retire(bot: Any) -> None:
         for t in bot._cds_th_taps:

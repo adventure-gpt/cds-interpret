@@ -171,6 +171,66 @@ def wrap_after_decision(base: Any, name: str, after: Callable[[Any, Any], None],
                  "__doc__": f"{base.__name__}, playing exactly as it does, with cds-interpret's {name}."})
 
 
+class FrameGuard:
+    """Keeps one bad frame from ending an add-on (the overlay): an error is logged - the first ``first`` of the
+    match, then every ``every``-th, and any new kind of error, with its traceback - to the bot's log and, when
+    ``log_file`` is given, to that file; the work goes on with the next frame. Only ``limit`` failures IN A ROW (no
+    ``ok()`` between them) give up: ``failed`` then returns True.
+
+        guard = FrameGuard(bot, "thoughts overlay", log_file="overlay_errors.log")
+        try:
+            work(packet); guard.ok()
+        except Exception as e:
+            if guard.failed(frame, e):
+                ...switch it off..."""
+
+    def __init__(self, bot: Any, name: str, limit: int = 600, first: int = 3, every: int = 200,
+                 log_file: Any = None):
+        self.bot, self.name, self.limit, self.first, self.every = bot, name, int(limit), int(first), int(every)
+        self.log_file = log_file
+        self.in_a_row = 0
+        self.total = 0
+        self._kinds: set[str] = set()
+
+    def ok(self) -> None:
+        """A frame went well: the run of failures is over."""
+        self.in_a_row = 0
+
+    def failed(self, frame: Any, e: BaseException) -> bool:
+        """Count and (sometimes) log a failed frame; True when ``limit`` have failed in a row."""
+        import traceback
+        self.in_a_row += 1
+        self.total += 1
+        n = self.in_a_row
+        kind = f"{type(e).__name__}: {e}"
+        new = kind not in self._kinds and len(self._kinds) < 20
+        self._kinds.add(kind)
+        if self.total <= self.first or self.total % self.every == 0 or n >= self.limit or new:
+            tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+            self.write(f"cds-interpret: {self.name}: frame {frame} failed ({n} in a row, {self.total} in all; it "
+                       f"carries on, and stops after {self.limit} in a row): {e!r}\n{tb}")
+        return n >= self.limit
+
+    def write(self, msg: str) -> None:
+        _log(self.bot, msg)
+        if self.log_file:
+            import time
+            from pathlib import Path
+            try:
+                p = Path(self.log_file)
+                p.parent.mkdir(parents=True, exist_ok=True)
+                with p.open("a", encoding="utf-8") as f:
+                    f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + msg.rstrip() + "\n")
+            except OSError:                           # (a log that can't be written must not stop anything)
+                pass
+
+
+def has_ball(packet: Any) -> bool:
+    """False for a packet without a ball (after a goal, during the replay): there is nothing to read then."""
+    balls = getattr(packet, "balls", None)
+    return balls is None or len(balls) > 0
+
+
 def _log(bot: Any, msg: str, level: str = "warning") -> None:
     logger = getattr(bot, "logger", None) or getattr(bot, "_logger", None)
     if logger is not None and hasattr(logger, level):
