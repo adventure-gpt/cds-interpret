@@ -2,7 +2,8 @@
 with a renderer that writes SVG shapes instead of sending them to the game (1920 x 1080 screen, RLBot's 10 x 20
 pixel font approximated by a monospace one).
 
-    python scripts/render_panel.py assets/overlay-panel.svg
+    python scripts/render_panel.py                     # assets/overlay-panel.svg and assets/overlay-panel-team.svg
+    python scripts/render_panel.py out.svg [--team]    # one of them, somewhere else
 """
 
 from __future__ import annotations
@@ -49,20 +50,28 @@ class SvgRenderer:
         return lambda *a, **k: None
 
 
-def main(out: str) -> None:
-    flat = SimpleNamespace(Color=lambda r, g, b, a=255: (r, g, b, a),
-                           Vector3=lambda x=0.0, y=0.0, z=0.0: SimpleNamespace(x=x, y=y, z=z),
-                           CarAnchor=lambda i, v: None, TextHAlign=SimpleNamespace(Left=0, Center=1, Right=2))
-    th = {"value": 0.55,
+RESULT = {"value": 0.55,
           "action": {"words": "throttle, steer right, boost", "p": 0.81},
           "features": [{"name": "lined up for a shot", "act": 2.1, "on": True},
-                       {"name": "ball on our side", "act": 0.0, "on": False}],
+                       {"name": "ball on our side", "act": 0.0, "on": False},
+                       {"name": "low on boost", "act": 0.0, "on": False}],
+          "why": [{"name": "lined up for a shot", "push": 0.92}, {"name": "ball on our side", "push": 0.31},
+                  {"name": "low on boost", "push": -0.74}],
+          "looking": {"own car": 0.46, "ball": 0.38, "opponents": 0.16},
           "probes": {"Threat on goal": 0.08, "First to the ball": 0.74, "Time to the ball": 0.9},
           "looks": {"Threat on goal": {"unit": "%", "color": [240, 90, 80]},
                     "First to the ball": {"unit": "%", "color": [90, 220, 120]},
                     "Time to the ball": {"unit": "s"}}}
+TEAM = {**RESULT, "looking": {"own car": 0.41, "ball": 0.33, "opponents": 0.14, "team-mates": 0.12}}
+
+
+def main(out: str, team: bool = False) -> None:
+    flat = SimpleNamespace(Color=lambda r, g, b, a=255: (r, g, b, a),
+                           Vector3=lambda x=0.0, y=0.0, z=0.0: SimpleNamespace(x=x, y=y, z=z),
+                           CarAnchor=lambda i, v: None, TextHAlign=SimpleNamespace(Left=0, Center=1, Right=2))
     r = SvgRenderer()
-    draw_thoughts(r, flat, th, title="DEMO BOT'S MIND", value_scale=1.0, frame=0, state={})
+    draw_thoughts(r, flat, TEAM if team else RESULT, title="DEMO BOT'S MIND", value_scale=1.0, frame=0, state={},
+                  subtitle="car 2 of 3 - on camera" if team else None, available={"why", "looking"})
     x0, y0, x1, y1 = r.box
     pad = 14
     vb = f"{x0 - pad:.0f} {y0 - pad:.0f} {x1 - x0 + 2 * pad:.0f} {y1 - y0 + 2 * pad:.0f}"
@@ -78,4 +87,9 @@ def main(out: str) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "assets/overlay-panel.svg")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    if args:
+        main(args[0], team="--team" in sys.argv)
+    else:
+        main("assets/overlay-panel.svg")
+        main("assets/overlay-panel-team.svg", team=True)

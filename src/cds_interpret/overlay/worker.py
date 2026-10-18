@@ -21,11 +21,14 @@ import queue
 import sys
 import threading
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from .pack import Thoughts, load_pack
+
+if TYPE_CHECKING:
+    from .explain import Explainer
 
 
 class Ends:
@@ -58,6 +61,7 @@ class WorkerLink:
         self.proc.start()
         self.busy = True                # until the child says it is ready
         self.ready = False
+        self.hello: dict[str, Any] = {}  # the child's "ready" message (what it can do, notes for the log)
         self._q: queue.Queue[Any] = queue.Queue(maxsize=1)
         self._writer = threading.Thread(target=self._write, name="cds-interpret-overlay-writer", daemon=True)
         self._writer.start()
@@ -92,6 +96,7 @@ class WorkerLink:
             if not self.ready:
                 self.ready = True
                 if isinstance(msg, dict) and msg.get("ready"):
+                    self.hello = msg
                     return None
             return msg
         return None
@@ -135,35 +140,62 @@ def load_critic(spec: str | None) -> Callable[[np.ndarray], Any] | None:
     return getattr(importlib.import_module(mod), attr)()
 
 
-def compute(th: Thoughts, msg: dict[str, Any], critic: Callable[[np.ndarray], Any] | None = None) -> dict[str, Any]:
+def _action_of(th: Thoughts, out_row: Any) -> int | None:
+    """The move the policy leans to: the argmax of its output row (the "Next move" row's move)."""
+    if out_row is None:
+        return None
+    o = np.asarray(out_row, np.float64).reshape(-1)
+    return int(o.argmax()) if len(o) else None
+
+
+def compute(th: Thoughts, msg: dict[str, Any], critic: Callable[[np.ndarray], Any] | None = None,
+            explainer: Explainer | None = None) -> dict[str, Any]:
     """One request -> one result per car. msg: "layer" [n, d] (the pack's layer), "output" [n, A] (the action
-    output), optional "obs" [n, D] (for a critic), "land_h" [n, d'] (the landing layer when it is another one),
-    "frame"."""
+    output), optional "obs" [n, ...] (the network's input: for a critic and "why this move"), "land_h" [n, d'] (the
+    landing layer when it is another one), "frame". For the panel's car (row "panel"): "why" (True: its "why this
+    move"), "looking" (True: its "looking at", from "state" - the game as Frames fields of one packet - seen by car
+    slot "me", averaged over "donors" donor moments). Returns {"frame", "cars": [...], "notes": [...]}."""
     layer = np.asarray(msg["layer"], np.float32)
     n = len(layer)
     out_rows = msg.get("output")
+    obs = msg.get("obs")
     value: list[float | None] = [None] * n
-    if critic is not None and msg.get("obs") is not None:
-        v = critic(np.asarray(msg["obs"], np.float32))
+    if critic is not None and obs is not None:
+        v = critic(np.asarray(obs, np.float32))
         v = v.detach().cpu().numpy() if hasattr(v, "detach") else np.asarray(v)
         value = [float(x) for x in np.asarray(v, np.float64).reshape(-1)[:n]]
     land_h = msg.get("land_h")
     if land_h is None and th.land is not None and th.land_module == th.layer:
         land_h = layer
+    panel = msg.get("panel")
+    notes_before = len(explainer.notes) if explainer is not None else 0
     cars = []
     for k in range(n):
-        r = th.read(layer[k], None if out_rows is None else out_rows[k])
+        out_k = None if out_rows is None else out_rows[k]
+        r = th.read(layer[k], out_k)
         if value[k] is not None:
             r["value"] = value[k]
         if land_h is not None and th.land is not None:
             r["land_xy"] = th.land_xy(land_h[k])
+        if explainer is not None and panel is not None and int(panel) == k:
+            a = _action_of(th, out_k)
+            if msg.get("why") and a is not None:
+                acts = np.array([f["act"] for f in r["features"]], np.float32)
+                r["why"] = explainer.why(None if obs is None else np.asarray(obs)[k], layer[k], a, acts)
+            if msg.get("looking") and a is not None:
+                r["looking"] = explainer.looking(msg.get("state"), int(msg.get("me", 0)), a,
+                                                 int(msg.get("donors", 3)))
         cars.append(r)
-    return {"frame": msg.get("frame"), "cars": cars}
+    notes = explainer.notes[notes_before:] if explainer is not None else []
+    return {"frame": msg.get("frame"), "cars": cars, "notes": list(notes)}
 
 
-def serve(conn: Any, pack_path: str, critic_spec: str | None = None) -> None:
+def serve(conn: Any, pack_path: str, critic_spec: str | None = None, policy_spec: str | None = None) -> None:
     """The worker process: below-normal priority, one torch thread if torch is used, answering each request with
-    compute(); None ends it. Errors are sent back as {"error": ...} - the overlay must never stop the bot."""
+    compute(); None ends it. ``policy_spec`` ("module:factory"): the bot's Policy, built here, for "why this move"
+    and "looking at" (and the outlook, from its critic, when there is no ``critic_spec``). The ready message says
+    what it can do ({"ready", "available", "notes"}); errors are sent back as {"error": ...} - the overlay must
+    never stop the bot."""
     below_normal()
     try:
         import torch
@@ -171,12 +203,26 @@ def serve(conn: Any, pack_path: str, critic_spec: str | None = None) -> None:
     except Exception:                                 # (torch is optional in the worker)
         pass
     th = Thoughts(load_pack(pack_path))
+    notes: list[str] = []
     try:
         critic = load_critic(critic_spec)
     except Exception as e:
         critic = None
-        print(f"cds-interpret overlay: critic {critic_spec!r} not loaded ({e!r}); the outlook bar uses the pack")
-    conn.send({"ready": True})
+        notes.append(f"critic {critic_spec!r} not loaded ({e}); the outlook bar uses the pack")
+    explainer = None
+    if policy_spec:
+        from .explain import Explainer, load_policy
+        try:
+            pol = load_policy(policy_spec)
+            explainer = Explainer(th, pol)
+            notes.extend(explainer.notes)
+            explainer.notes.clear()
+            if critic is None and pol is not None and pol.value_fn is not None:
+                critic = pol.value
+        except Exception as e:
+            notes.append(f"policy {policy_spec!r} not loaded ({e}); 'why this move' and 'looking at' stay off")
+    available = explainer.available if explainer is not None else {"why": False, "looking": []}
+    conn.send({"ready": True, "available": available, "notes": notes})
     while True:
         try:
             msg = conn.recv()
@@ -185,7 +231,7 @@ def serve(conn: Any, pack_path: str, critic_spec: str | None = None) -> None:
         if msg is None:
             break
         try:
-            conn.send(compute(th, msg, critic))
+            conn.send(compute(th, msg, critic, explainer))
         except Exception as e:                        # the overlay must never stop the bot: report it instead
             conn.send({"error": repr(e)})
 

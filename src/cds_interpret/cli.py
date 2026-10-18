@@ -79,6 +79,8 @@ def main(argv: list[str] | None = None) -> int:
     ck = sub.add_parser("check-panel", help="check a panel config, and that what it shows is in your pack")
     ck.add_argument("path", help="the panel config (a .toml file)")
     ck.add_argument("pack", nargs="?", help="the thoughts pack it will show (a .npz file)")
+    ck.add_argument("--policy", help="\"package.module:factory\" as you give it to with_thoughts(policy=...): also try "
+                                     "'why this move' and 'looking at' with it, and time them")
     ap.add_argument("--version", action="store_true", help="print the version")
     args = ap.parse_args(argv)
     if args.version:
@@ -105,11 +107,23 @@ def main(argv: list[str] | None = None) -> int:
         try:
             conf = PanelConfig.load(args.path)
             problems = check_panel(conf, args.pack) if args.pack else []
+            tried = None
+            if args.policy:
+                if not args.pack:
+                    print("--policy needs the pack too: cds-interpret check-panel panel.toml thoughts.npz --policy ...")
+                    return 1
+                from .overlay.explain import try_readings
+                tried = try_readings(args.pack, args.policy, donors=conf.wants["donors"])
+                problems += tried["problems"]
         except CDSInterpretError as e:
             print(e)
             return 1
         for p in problems:
             print(f"- {p}")
+        if tried is not None:
+            for what, key in (("why this move", "why_ms"), ("looking at", "looking_ms")):
+                if tried[key] is not None:
+                    print(f"  {what}: works, {tried[key]:.1f} ms a reading on one thread")
         if problems:
             return 1
         print(f"{args.path} is fine" + (f", and everything it shows is in {args.pack}." if args.pack else

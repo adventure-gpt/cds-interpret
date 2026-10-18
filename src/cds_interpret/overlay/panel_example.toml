@@ -20,6 +20,17 @@ smoothing = 0.35            # numbers move this share of the way to each new rea
 hold = 0.6                  # seconds a feature stays listed after it stops firing (no flicker)
 draw_every = 8              # frames between draws: 8 is 15 times a second
 # value_scale = 1.0         # the outlook value that fills its bar (default: the one in the pack)
+keep_size = true            # every row keeps its full height (a one-line move keeps the room of two, and so on),
+                            # so nothing below ever moves and the panel never changes size; false: rows shrink
+
+# Team modes (2v2, 3v3): whose thoughts the panel shows. The first rule that gives one of your bot's cars wins:
+#   "camera"  the car the host's camera follows       "last"   the last of yours the camera followed
+#   "random"  one of yours, picked for the match      "first"  your first car       2  your second car (any number)
+#   "hide"    no panel (e.g. ["camera", "hide"]: thoughts only while the camera is on one of yours)
+follow = ["camera", "last", "random"]
+# The line under the title in team modes: {car} its number, {cars} how many, {rule} why this one ("on camera",
+# "last on camera", "picked for this match", "first car", "fixed"), {name} the player's name. "" for none.
+subtitle = "car {car} of {cars} - {rule}"
 
 [colors]
 background = [0, 0, 0, 175]
@@ -33,16 +44,26 @@ notice = [255, 196, 64]     # a feature firing now
 notice_held = [200, 150, 60]  # a feature that stopped firing a moment ago
 bar = [0, 170, 255]         # a bar with no colour of its own
 divider = [255, 255, 255]   # the middle mark of a centred bar
+push = [255, 255, 255]      # "why this move": a feature pushing the move
+push_strong = [255, 196, 64]  # ... pushing it hard (at least the row's "strong")
+push_against = [240, 90, 80]  # ... the one pushing hardest against it
+own_car = [80, 180, 255]    # "looking at": the bot's own car
+ball = [255, 196, 64]       # ... the ball
+opponents = [240, 90, 80]   # ... the opponents
+team_mates = [170, 130, 255]  # ... the team-mates (2v2, 3v3)
 
 [markers]
-landing = true              # where the bot's own layer thinks the ball will land: a ring with a crosshair
+landing = true              # where the network thinks the ball will land: a ring with a crosshair (false: none)
+landing_for = "all"         # whose rings: "all" your cars, "panel" the panel's car, "camera" the car on camera,
+                            # "none", or car numbers like [1, 3]
 landing_color = [0, 170, 255]
 landing_radius = 150.0      # in unreal units (the ball's radius is about 93)
-landing_line = true         # a line from the car to the ring
-landing_smooth = 0.25       # seconds of smoothing for the ring (0 = every reading as it comes)
+landing_line = true         # a line from each car to its ring
+landing_smooth = 0.25       # seconds of smoothing for the rings (0 = every reading as it comes)
 prediction = true           # where RLBot's ball prediction says it will land: a white cross
 prediction_color = [255, 255, 255]
-car_label = true            # the first feature firing, floating above the car
+car_label = true            # a word floating above the panel's car
+car_label_from = "why"      # "why": the feature driving its move (else the first firing); "noticing": the first firing
 # car_label_color = [255, 196, 64]
 # hook = "my_panel:draw_markers"   # your own 3D drawing (customize-the-panel.md): remove the # to use it
 
@@ -57,6 +78,9 @@ car_label = true            # the first feature firing, floating above the car
 # The rows, top to bottom. Kinds:
 #   outlook   a bar from the middle with a word (source "value": your critic, or the pack's outlook probe)
 #   action    the move the policy leans toward, in words, and how sure it is ("lines": how many lines it may take)
+#   why       the named features pushing that move hardest, and the one pushing hardest against it
+#             (needs the overlay's policy=...: docs/howto/why-and-looking.md)
+#   looking   what the move rests on: own car, ball, opponents, team-mates, as one coloured bar (needs policy=...)
 #   noticing  the named features firing now ("max", "empty", "features": which ones may appear)
 #   probes    every probe of the pack that has no row of its own, each in its own style
 #   bar       a name, a percentage and a bar under it      (source "probe:<name>" or "feature:<name>")
@@ -68,6 +92,7 @@ car_label = true            # the first feature firing, floating above the car
 #   spacer    a gap ("height", in lines)
 #   custom    your own Python ("hook": "module:function"), drawn with line(), bar() and gap()
 # Every row takes "label" (the name on the left) and "color" where it has a bar.
+# "why" and "looking" show only when the overlay can compute them; without, they take no room at all.
 
 [[rows]]
 kind = "outlook"
@@ -78,6 +103,24 @@ words = ["in trouble", "even", "good"]
 kind = "action"
 label = "Next move"
 lines = 2
+
+[[rows]]
+kind = "why"
+label = "Why this move"
+max = 2                     # how many features pushing the move at most
+min_push = 0.15             # the smallest push worth naming (in log-probability: 0.7 is about twice as likely)
+strong = 0.6                # a push this big is highlighted; one this big against the move is shown with a -
+against = true              # show the strongest feature pushing against the move
+empty = "no named idea"     # what to say when no named feature pushes it
+# features = ["lined up for a shot"]   # which features may appear (default: all the pack's)
+
+[[rows]]
+kind = "looking"
+label = "Looking at"
+every = 4                   # computed every 4th reading (the worker's heaviest part; a few times a second)
+donors = 3                  # recorded moments each reading compares with (more: steadier, slower)
+legend = true               # the words and percentages under the bar
+words = ["car", "ball", "opp", "mates"]   # the legend's words for own car, ball, opponents, team-mates
 
 [[rows]]
 kind = "noticing"

@@ -171,10 +171,10 @@ def wrap_after_decision(base: Any, name: str, after: Callable[[Any, Any], None],
                  "__doc__": f"{base.__name__}, playing exactly as it does, with cds-interpret's {name}."})
 
 
-def _log(bot: Any, msg: str) -> None:
+def _log(bot: Any, msg: str, level: str = "warning") -> None:
     logger = getattr(bot, "logger", None) or getattr(bot, "_logger", None)
-    if logger is not None:
-        logger.warning(msg)
+    if logger is not None and hasattr(logger, level):
+        getattr(logger, level)(msg)
     else:
         print(msg)
 
@@ -184,3 +184,35 @@ def our_indices(bot: Any) -> list[int]:
     if hasattr(bot, "indices") and getattr(bot, "indices", None):
         return [int(i) for i in bot.indices]
     return [int(bot.index)]
+
+
+def our_cars(bot: Any, packet: Any) -> list[int]:
+    """The player indices of every car this bot drives in the match, lowest first: a Hivemind's own cars; for a Bot
+    (RLBot runs one process per car), its own car and the cars of its team run by the same bot - the same agent id in
+    the match configuration. Every copy of the bot works out the same list from the same packet."""
+    mine = our_indices(bot)
+    if getattr(bot, "indices", None):
+        return sorted(set(mine))
+    try:
+        configs = list(getattr(getattr(bot, "match_config", None), "player_configurations", None) or [])
+        me_id = getattr(bot, "player_id", None)
+        agent = next((getattr(c.variety, "agent_id", None) for c in configs if c.player_id == me_id), None)
+        if not agent:
+            return mine
+        ids = {c.player_id for c in configs
+               if getattr(c.variety, "agent_id", None) == agent and int(c.team) == int(bot.team)}
+        same = [j for j, p in enumerate(packet.players)
+                if getattr(p, "player_id", None) in ids and int(p.team) == int(bot.team)]
+        return sorted(set(same) | set(mine))
+    except Exception:                                 # (an unusual packet or config: just this bot's own car)
+        return mine
+
+
+def spectated(packet: Any) -> int | None:
+    """``packet.match_info.last_spectated``: the player the host's camera followed most recently (None when the
+    packet has no such field). RLBot keeps it when the camera goes free, and it is 0 before anything was spectated."""
+    v = getattr(getattr(packet, "match_info", None), "last_spectated", None)
+    try:
+        return None if v is None else int(v)
+    except (TypeError, ValueError):
+        return None

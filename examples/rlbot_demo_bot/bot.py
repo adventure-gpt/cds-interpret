@@ -4,6 +4,9 @@
     python bot.py --thoughts            # with the live overlay (thoughts.npz: make it with make_pack.py)
     python bot.py --record              # recording the game to recordings/ while it plays
 
+In 2v2 or 3v3 RLBot runs one copy per car: every copy works out the same panel car (the one the host's camera
+follows), that copy draws the panel and each copy draws its own landing marker.
+
 Your own bot works the same way: keep your Bot class as it is, and in its entry point wrap the class with
 ``with_thoughts`` and / or ``with_recorder`` before you run it.
 """
@@ -48,7 +51,10 @@ class DemoBot(Bot):
 def bot_class(argv: list[str]) -> type:
     cls: type = DemoBot
     if "--thoughts" in argv:
-        cls = ci.overlay.with_thoughts(cls, pack=HERE / "thoughts.npz", network="net", title="DEMO BOT'S MIND")
+        # policy=: the demo bot's network and obs function, built in the overlay's worker, for the "why this move"
+        # and "looking at" rows (your bot: a function of yours that builds its ci.Policy)
+        cls = ci.overlay.with_thoughts(cls, pack=HERE / "thoughts.npz", network="net", title="DEMO BOT'S MIND",
+                                       policy="cds_interpret.demo:policy")
     if "--record" in argv:
         cls = ci.record.with_recorder(cls, out=HERE / "recordings", network="net", tick_skip=TICK_SKIP)
     return cls
