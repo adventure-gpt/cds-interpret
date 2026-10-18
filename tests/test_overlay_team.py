@@ -377,6 +377,21 @@ def test_several_markers_the_subtitle_and_the_new_rows():
     assert [c[0] for c in r3.calls].count("draw_polyline_3d") == 2 and "draw_rect_2d" not in [c[0] for c in r3.calls]
 
 
+def test_car_label_in_team_colour():
+    """The word above the panel's car is in its team's colour, unless the config gives it a colour of its own."""
+    def label_colour(cfg=None, team=None, th=RESULT):
+        r = FakeRenderer()
+        Panel(cfg or PanelConfig()).draw(r, fake_flat(), th, car_index=1, state={}, frame=1, team=team)
+        return next(c[1][3] for c in r.calls if c[0] == "draw_string_3d")
+    assert label_colour(team=0) == (80, 160, 255, 255) and label_colour(team=1) == (255, 150, 40, 255)
+    assert label_colour() == (255, 196, 64, 255)                  # no team given: the notice colour, as before
+    assert label_colour(PanelConfig.from_dict({"colors": {"team_orange": [200, 100, 0]}}), 1) == (200, 100, 0, 255)
+    fixed = PanelConfig.from_dict({"markers": {"car_label_color": [1, 2, 3]}})
+    assert label_colour(fixed, 0) == label_colour(fixed, 1) == (1, 2, 3, 255)
+    styled = PanelConfig.from_dict({"features": {"ball high": {"color": [9, 9, 9]}}})
+    assert label_colour(styled, 1) == (9, 9, 9, 255)              # a feature's own colour, when its style gives one
+
+
 def test_why_holds_a_moment_and_looking_keeps_its_last_reading():
     p, state = Panel(), {}
     p.draw(FakeRenderer(), fake_flat(), RESULT, state=state, frame=10)

@@ -51,6 +51,8 @@ own_car = [80, 180, 255]    # "looking at": the bot's own car
 ball = [255, 196, 64]       # ... the ball
 opponents = [240, 90, 80]   # ... the opponents
 team_mates = [170, 130, 255]  # ... the team-mates (2v2, 3v3)
+team_blue = [80, 160, 255]  # the word above a blue car
+team_orange = [255, 150, 40]  # ... and above an orange one
 
 [markers]
 landing = true              # where the network thinks the ball will land: a ring with a crosshair (false: none)
@@ -64,7 +66,7 @@ prediction = true           # where RLBot's ball prediction says it will land: a
 prediction_color = [255, 255, 255]
 car_label = true            # a word floating above the panel's car
 car_label_from = "why"      # "why": the feature driving its move (else the first firing); "noticing": the first firing
-# car_label_color = [255, 196, 64]
+# car_label_color = [255, 196, 64]   # one colour for it (default: the car's team colour, from [colors])
 # hook = "my_panel:draw_markers"   # your own 3D drawing (customize-the-panel.md): remove the # to use it
 
 # One table per named feature (its name in the pack, exactly), to rename it, change when it counts as firing, hide

@@ -209,3 +209,7 @@ def test_the_default_panel_draws_exactly_the_reference_picture(tmp_path):
     out = tmp_path / "panel.svg"
     mod.main(str(out))
     assert out.read_text(encoding="utf-8") == (root / "assets" / "overlay-panel.svg").read_text(encoding="utf-8")
+    mod.main(str(out), team=True)                                 # the team-mode picture (the subtitle, team-mates)
+    assert out.read_text(encoding="utf-8") == (root / "assets" / "overlay-panel-team.svg").read_text(encoding="utf-8")
+    mod.field(str(out))                                           # a 3v3 moment from above: a ring for every car
+    assert out.read_text(encoding="utf-8") == (root / "assets" / "overlay-team-field.svg").read_text(encoding="utf-8")

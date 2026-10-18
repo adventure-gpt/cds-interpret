@@ -59,6 +59,7 @@ DEFAULT_COLORS: dict[str, tuple[int, ...]] = {
     "notice_held": (200, 150, 60), "bar": (0, 170, 255), "divider": (255, 255, 255),
     "push": (255, 255, 255), "push_strong": (255, 196, 64), "push_against": (240, 90, 80),
     "own_car": (80, 180, 255), "ball": (255, 196, 64), "opponents": (240, 90, 80), "team_mates": (170, 130, 255),
+    "team_blue": (80, 160, 255), "team_orange": (255, 150, 40),
 }
 # per-kind defaults of the row keys several kinds share
 _MAX = {"noticing": 3, "why": 2}
@@ -153,7 +154,7 @@ class Markers:
     prediction_color: tuple[int, ...] = (255, 255, 255)
     car_label: bool = True               # a word above the panel's car
     car_label_from: str = "why"          # "why": the feature driving its move (else the first firing); "noticing"
-    car_label_color: tuple[int, ...] | None = None   # default: colors.notice
+    car_label_color: tuple[int, ...] | None = None   # default: the car's team colour (colors.team_blue / team_orange)
     hook: str | None = None              # "module:function" drawing markers of your own
 
     def __post_init__(self) -> None:
@@ -608,7 +609,7 @@ class Panel:
     # ---- the panel
     def draw(self, renderer: Any, flat: Any, th: dict[str, Any] | None, car_index: int | None = None,
              landing_true: Any = None, landing_think: Any = None, state: dict[str, Any] | None = None,
-             frame: int | None = None, value_scale: float | None = None, team: int = 0,
+             frame: int | None = None, value_scale: float | None = None, team: int | None = None,
              marks: list[tuple[int | None, Any]] | None = None, subtitle: str | None = None,
              available: Any = None) -> None:
         """Draw one result (see the module's notes) and the markers.
@@ -617,7 +618,7 @@ class Panel:
         player index. landing_true: world (x, y, z) from RLBot's prediction (a white cross). landing_think: world
         (x, y) of the panel car's own landing guess - or ``marks``, [(car index, (x, y))], one ring per car. state: a
         dict kept between draws for this car. value_scale: the outlook value that fills its bar when the config does
-        not say. subtitle: the line under the title (whose thoughts these are). available: the readings the overlay
+        not say. team: the panel car's team (0 blue, 1 orange: the word above it takes the team's colour). subtitle: the line under the title (whose thoughts these are). available: the readings the overlay
         can compute ({"why", "looking"}): with ``keep_size``, their rows keep their place before their first
         reading."""
         cfg = self.config
@@ -650,7 +651,7 @@ class Panel:
             driver = ctx.get("driver")
             if driver is None and cfg.markers.car_label_from == "why" and "why" not in ctx:
                 driver = self._driver(self._why(th, state), None)
-            self._car_label(renderer, flat, feats, car_index, driver)
+            self._car_label(renderer, flat, feats, car_index, driver, team)
         self._markers(renderer, flat, th, car_index, landing_true, marks, team)
         renderer.end_rendering()
 
@@ -832,7 +833,9 @@ class Panel:
                 d.blank(1, scale=sc)
 
     def _car_label(self, renderer: Any, flat: Any, feats: list[dict[str, Any]], car_index: int | None,
-                   driver: str | None) -> None:
+                   driver: str | None, team: int | None = None) -> None:
+        """The word above the panel's car: in markers.car_label_color when set, else in the feature's own colour
+        when its style gives one, else in the car's team colour (colors.team_blue / team_orange)."""
         m = self.config.markers
         if not m.car_label or car_index is None:
             return
@@ -840,13 +843,14 @@ class Panel:
         text = driver if m.car_label_from == "why" and driver else (on[0]["label"] if on else None)
         if not text:
             return
-        f0 = on[0] if on and text == on[0]["label"] else None
-        col = m.car_label_color or (f0["color"] if f0 else None) or self.config.colors["notice"]
+        own = next((f["color"] for f in feats if f["label"] == text and f["color"]), None)
+        side = {0: "team_blue", 1: "team_orange"}.get(-1 if team is None else int(team), "notice")
+        col = m.car_label_color or own or self.config.colors[side]
         renderer.draw_string_3d(text, flat.CarAnchor(car_index, flat.Vector3(0, 0, 120)), 1.2, flat.Color(*col),
                                 flat.Color(0, 0, 0, 160), flat.TextHAlign.Center)
 
     def _markers(self, renderer: Any, flat: Any, th: dict[str, Any] | None, car_index: int | None, landing_true: Any,
-                 marks: list[tuple[int | None, Any]], team: int) -> None:
+                 marks: list[tuple[int | None, Any]], team: int | None) -> None:
         m = self.config.markers
         if m.prediction and landing_true is not None:
             p = flat.Vector3(*[float(c) for c in landing_true])
@@ -878,14 +882,15 @@ def draw_thoughts(renderer: Any, flat: Any, th: dict[str, Any] | None, car_index
                   y: float | None = None, value_scale: float = 1.0, state: dict[str, Any] | None = None,
                   frame: int | None = None, config: PanelConfig | None = None,
                   marks: list[tuple[int | None, Any]] | None = None, subtitle: str | None = None,
-                  available: Any = None) -> None:
+                  available: Any = None, team: int | None = None) -> None:
     """Draw one result with the default panel (or ``config``); title, x and y override the config's. marks: a landing
     ring for each of several cars, [(car index, (x, y))], in place of landing_think's one; subtitle: a line under the
-    title; available: the readings the overlay can compute (see Panel.draw)."""
+    title; available: the readings the overlay can compute (see Panel.draw); team: the car's team (0 blue, 1 orange),
+    for the colour of the word above it."""
     cfg = config or PanelConfig()
     if title is not None or x is not None or y is not None:
         from dataclasses import replace
         cfg = replace(cfg, title=cfg.title if title is None else title, x=cfg.x if x is None else x,
                       y=cfg.y if y is None else y)
-    Panel(cfg).draw(renderer, flat, th, car_index, landing_true, landing_think, state, frame, value_scale,
+    Panel(cfg).draw(renderer, flat, th, car_index, landing_true, landing_think, state, frame, value_scale, team,
                     marks=marks, subtitle=subtitle, available=available)
