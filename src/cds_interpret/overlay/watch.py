@@ -39,6 +39,7 @@ from ..hooks import LayerTap
 from .bot import STALE, _fresh, _rows
 from .pack import Thoughts, load_pack
 from .panel import GROUP, Panel, PanelConfig, check_panel, smooth_point
+from .share import Neighbours
 from .team import Follow, landing_cars, match_seed, subtitle_text
 from .worker import compute
 
@@ -142,12 +143,14 @@ def watch_thoughts(policy: Any, pack: str | os.PathLike[str], cars: Any, panel: 
                 "readings": 0, "cleared": True, "panel_car": None,
                 "guard": FrameGuard(self, "watch", MAX_FAILED_DRAWS, log_file=error_log)}
             self._cds_scale = float(pk["meta"].get("value_scale", 1.0))
+            self._cds_share = Neighbours()             # (the other team's overlay, if any: overlay.share)
             self.update_rendering_status(True)
 
         def handle_packet(self, packet: Any) -> None:
             if not getattr(self, "_cds_on", False):
                 return
             st = self._cds_st
+            self._cds_share.beat(None, False)          # (this overlay is running; what it shows: _cds_draw)
             frame = int(packet.match_info.frame_num)
             if 0 <= frame - st["drawn"] < self._cds_panel.config.draw_every or not self.renderer.can_render:
                 return
@@ -252,14 +255,19 @@ def watch_thoughts(policy: Any, pack: str | os.PathLike[str], cars: Any, panel: 
             true = landing_point(getattr(self, "ball_prediction", None)) if markers.prediction else None
             av = self._cds_ex.available
             from rlbot import flat
+            share = self._cds_share
+            share.beat(team, thc is not None)
             pnl.draw(self.renderer, flat, thc, car_index=panel_car, landing_true=true,
                      state=_fresh(st["draw"], panel_car, frame) if thc is not None else None, frame=frame,
                      value_scale=self._cds_scale, team=team, marks=marks, subtitle=sub,
-                     available={"why": av["why"], "looking": len(players) in av["looking"]})
+                     available={"why": av["why"], "looking": len(players) in av["looking"]},
+                     crowded=share.crowded(team))
 
         def retire(self) -> None:
             for t in getattr(self, "_cds_taps", []):
                 t.detach_hooks()
+            if getattr(self, "_cds_share", None) is not None:
+                self._cds_share.close()
 
     return WatchThoughts
 

@@ -58,6 +58,7 @@ from ..errors import CDSInterpretError
 from ..hooks import LayerTap
 from .pack import Thoughts, load_pack
 from .panel import GROUP, Panel, PanelConfig, check_panel, smooth_point
+from .share import Neighbours
 from .team import Follow, landing_cars, match_seed, subtitle_text
 from .worker import WorkerLink, compute, load_critic, serve
 
@@ -192,6 +193,7 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
                              "worker_guard": FrameGuard(bot, "thoughts overlay's worker", MAX_FAILED_READINGS,
                                                         log_file=error_log)}
         bot._cds_th_scale = float(pk["meta"].get("value_scale", 1.0))
+        bot._cds_th_share = Neighbours()                # (the other team's overlay, if any: overlay.share)
         if hasattr(bot, "update_rendering_status"):
             bot.update_rendering_status(True)
 
@@ -251,6 +253,8 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
 
     def _after(bot: Any, packet: Any) -> bool:
         """The frame's work; True when it drew."""
+        share = bot._cds_th_share
+        share.beat(None, False)                         # (this overlay is running; what it shows: below)
         if not has_ball(packet):                        # (the replay after a goal: nothing to read)
             return False
         check_worker(bot)
@@ -353,14 +357,17 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
             name = getattr(packet.players[panel_car], "name", "") if panel_car < len(packet.players) else ""
             sub = subtitle_text(pnl.config.subtitle, panel_car, ours, rule, str(name))
         state = _fresh(st["draw"], panel_car, frame) if th is not None and panel_car is not None else None
+        share.beat(int(bot.team), th is not None)
         pnl.draw(bot.renderer, flat, th, car_index=panel_car, landing_true=true, state=state, frame=frame,
                  value_scale=bot._cds_th_scale, team=int(bot.team), marks=marks, subtitle=sub,
-                 available=available(bot, len(packet.players)))
+                 available=available(bot, len(packet.players)), crowded=share.crowded(int(bot.team)))
         return True
 
     def retire(bot: Any) -> None:
         for t in bot._cds_th_taps:
             t.detach_hooks()
+        if getattr(bot, "_cds_th_share", None) is not None:
+            bot._cds_th_share.close()
         if bot._cds_th_link is not None:
             bot._cds_th_link.close()
 

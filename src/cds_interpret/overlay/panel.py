@@ -47,6 +47,7 @@ BAR_H = 0.009
 BAR_ROW = 0.016                         # a bar's line under its label
 CHAR_W = 0.0053                         # one character of RLBot's font at scale 1, as a fraction of the width
 FPS = 120
+SIDES = ("auto", "team", "fixed")      # [panel] side
 GROUP = "cds-interpret-thoughts"        # the render group the panel and its markers are drawn in
 
 ROW_KINDS = ("outlook", "action", "why", "looking", "noticing", "probes", "bar", "percent", "seconds", "value",
@@ -176,6 +177,9 @@ class PanelConfig:
     title: str | None = None             # None: the pack's title (make_pack(title=...)), "THOUGHTS" by default
     x: float = 0.012                     # top-left corner, as fractions of the screen
     y: float = 0.30
+    side: str = "auto"                   # two overlays (both teams' thoughts): "auto" - at x, y alone, on the teams'
+    #                                      sides (blue left, orange right: x mirrored) when the other team's overlay
+    #                                      shows too; "team" - always the teams' sides; "fixed" - always at x, y
     width: float = 0.17                  # the panel's width, as a fraction of the screen's
     text_scale: float = 1.0
     title_scale: float = 1.2
@@ -205,6 +209,28 @@ class PanelConfig:
         if not isinstance(self.subtitle, str):
             raise CDSInterpretError(f"[panel] subtitle = {self.subtitle!r} should be text in quotes (\"\" for none)")
         self.subtitle = check_subtitle(self.subtitle, "[panel] subtitle")
+        if self.side not in SIDES:
+            close = difflib.get_close_matches(str(self.side), SIDES, n=1)
+            hint = f" Did you mean {close[0]!r}?" if close else ""
+            raise CDSInterpretError(f"[panel] side = {self.side!r}: use \"auto\" (the teams' sides of the screen when "
+                                    "the other team's overlay shows too), \"team\" (always) or \"fixed\" (always at "
+                                    f"x, y).{hint}")
+
+    def sided(self, team: int | None, crowded: bool = False) -> bool:
+        """Does the panel of this team's car go to its team's side (and take the team's colour)? ``crowded``: the
+        other team's overlay shows too (overlay.share)."""
+        if team is None or int(team) not in (0, 1) or self.side == "fixed":
+            return False
+        return self.side == "team" or bool(crowded)
+
+    def place(self, team: int | None, crowded: bool = False) -> float:
+        """The panel's left edge for this team's car: x, or on the team's side of the screen (blue left, orange
+        right) as the mirror image of x - see ``side``."""
+        if not self.sided(team, crowded):
+            return self.x
+        right = self.x + self.width / 2 > 0.5
+        want_right = team == 1
+        return self.x if right == want_right else max(0.0, 1.0 - self.x - self.width)
 
     def rows_of(self, kind: str) -> list[RowSpec]:
         """The rows of one kind."""
@@ -630,7 +656,7 @@ class Panel:
              landing_true: Any = None, landing_think: Any = None, state: dict[str, Any] | None = None,
              frame: int | None = None, value_scale: float | None = None, team: int | None = None,
              marks: list[tuple[int | None, Any]] | None = None, subtitle: str | None = None,
-             available: Any = None) -> None:
+             available: Any = None, crowded: bool = False) -> None:
         """Draw one result (see the module's notes) and the markers.
 
         th: what the worker read for the panel's car (None: no panel, only ``marks``). car_index: the panel car's
@@ -639,16 +665,21 @@ class Panel:
         dict kept between draws for this car. value_scale: the outlook value that fills its bar when the config does
         not say. team: the panel car's team (0 blue, 1 orange: the word above it takes the team's colour). subtitle: the line under the title (whose thoughts these are). available: the readings the overlay
         can compute ({"why", "looking"}): with ``keep_size``, their rows keep their place before their first
-        reading."""
+        reading. crowded: the other team's overlay shows too (overlay.share): with ``side`` "auto" the panel goes to
+        its team's side of the screen and its title and rings take the team's colour."""
         cfg = self.config
+        sided = cfg.sided(team, crowded)
+        px = cfg.place(team, crowded)
+        team_col = cfg.colors["team_blue" if team == 0 else "team_orange"] if sided else None
         if marks is None:
             marks = [(car_index, landing_think)] if landing_think is not None else []
         renderer.begin_rendering(GROUP)
         driver = None
         if th is not None:
             ready = _readings(available) | self._seen
-            d = RowDrawer(self, flat, cfg.x, cfg.y)
-            d.line("THOUGHTS" if cfg.title is None else cfg.title, left_color=d.named("title"),
+            d = RowDrawer(self, flat, px, cfg.y)
+            d.line("THOUGHTS" if cfg.title is None else cfg.title,
+                   left_color=d.color(*team_col) if team_col is not None else d.named("title"),
                    scale=cfg.title_scale * cfg.text_scale)
             d.gap(0.05)                                 # (the title takes 1.25 lines in all)
             if subtitle:
@@ -660,7 +691,7 @@ class Panel:
             for i, row in enumerate(cfg.rows):
                 self._row(d, flat, th, row, i, feats, placed, state, frame, vscale, ctx)
             d.cy += 0.002
-            renderer.draw_rect_2d(cfg.x, cfg.y - 0.006, cfg.width, d.cy - cfg.y + 0.006,
+            renderer.draw_rect_2d(px, cfg.y - 0.006, cfg.width, d.cy - cfg.y + 0.006,
                                   d.color(*cfg.colors["background"]))
             for op in d.ops:
                 if op[0] == "r":
@@ -671,7 +702,7 @@ class Panel:
             if driver is None and cfg.markers.car_label_from == "why" and "why" not in ctx:
                 driver = self._driver(self._why(th, state), None)
             self._car_label(renderer, flat, feats, car_index, driver, team)
-        self._markers(renderer, flat, th, car_index, landing_true, marks, team)
+        self._markers(renderer, flat, th, car_index, landing_true, marks, team, team_col)
         renderer.end_rendering()
 
     def _row(self, d: RowDrawer, flat: Any, th: dict[str, Any], row: RowSpec, i: int, feats: list[dict[str, Any]],
@@ -871,7 +902,8 @@ class Panel:
                                 flat.Color(0, 0, 0, 160), flat.TextHAlign.Center)
 
     def _markers(self, renderer: Any, flat: Any, th: dict[str, Any] | None, car_index: int | None, landing_true: Any,
-                 marks: list[tuple[int | None, Any]], team: int | None) -> None:
+                 marks: list[tuple[int | None, Any]], team: int | None,
+                 ring_color: tuple[int, ...] | None = None) -> None:
         m = self.config.markers
         if m.prediction and landing_true is not None:
             p = flat.Vector3(*[float(c) for c in landing_true])
@@ -879,7 +911,7 @@ class Panel:
             renderer.draw_line_3d(flat.Vector3(p.x - 80, p.y, 20), flat.Vector3(p.x + 80, p.y, 20), col)
             renderer.draw_line_3d(flat.Vector3(p.x, p.y - 80, 20), flat.Vector3(p.x, p.y + 80, 20), col)
         if m.landing:
-            col = flat.Color(*m.landing_color)
+            col = flat.Color(*(ring_color or m.landing_color))     # (the team's colour beside another overlay)
             for ci, xy in marks:
                 if xy is None:
                     continue

@@ -128,6 +128,25 @@ RLBot runs a bot in one of two ways, and the overlay handles both:
   the rows to its `indices` in order. Run the network on its cars in that order - all of them in one call, or one call
   each - and every car's ring and the panel come from the right car.
 
+## Both teams showing their thoughts
+
+Two overlays can run in one match: the same bot on both teams, or two different bots that each show their
+thoughts (your bot's own `with_thoughts`, and a [watch script](watch-a-bot.md) over another bot, say). Each overlay
+draws its own panel and its own cars' rings; they never touch each other's drawings.
+
+While only one shows a panel, it stays where your panel config puts it. As soon as the other team's shows one too,
+the two move to their teams' sides of the screen, the way the game's scoreboard has them: **blue on the left, orange
+on the right**, at mirror images of your configured spot. Each panel's title and its landing rings take the team's
+colour, so you can tell whose is whose even with the same bot on both sides. When one stops, the other goes back.
+
+`[panel] side` chooses this: `"auto"` (the default: as above), `"team"` (always the teams' sides, even alone) or
+`"fixed"` (always where `x` and `y` say).
+
+How they find each other: every overlay leaves a small note in a folder in your temp directory
+(`cds-interpret-overlays`; `$CDS_INTERPRET_OVERLAYS` to put it elsewhere) about once a second - which team's car its
+panel shows - and reads the others'. RLBot runs a match's bots and scripts on one machine, so they all see the same
+folder. A note that stops being rewritten (a bot that ended) is ignored after a few seconds.
+
 ## What it costs
 
 Nothing extra for your bot's decisions: the overlay still only listens to your network with read-only hooks and does
@@ -136,9 +155,11 @@ per car; the heavier readings - [why this move and looking at](why-and-looking.m
 
 ## When something looks wrong
 
-**Two panels on top of each other.** The copies don't recognise each other as the same bot, so each thinks it is the
-only one. Start them all from the same `bot.toml` (the same agent id) - the example folder has two (`bot.toml` and
-`thoughts.bot.toml`), and they count as two different bots.
+**Two panels on top of each other.** On one team: the copies don't recognise each other as the same bot, so each
+thinks it is the only one. Start them all from the same `bot.toml` (the same agent id) - the example folder has two
+(`bot.toml` and `thoughts.bot.toml`), and they count as two different bots. On both teams: they should split to the
+two sides by themselves (above); if they don't, check `side` isn't `"fixed"` in either panel file, and that both run
+as the same Windows user (one temp folder).
 
 **The panel shows a car I haven't picked.** Either you haven't followed any car yet (RLBot says player 0, see above),
 or you're on the free camera after following that car. Follow the car you want once.

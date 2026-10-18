@@ -3,6 +3,17 @@
 All notable changes to cds-interpret are written down here. The project follows
 [Semantic Versioning](https://semver.org); before 1.0, minor versions may change the API (each change is listed).
 
+## [0.4.0] - 2026-10-18
+
+### Added
+
+- **Both teams' thoughts at once.** With the same bot on both teams, or two bots that each show their thoughts (a
+  bot's own overlay beside a watch script over another bot), the two panels used to land on the same spot. Now each
+  stays where its config puts it while it is alone, and the two go to their teams' sides of the screen - blue on the
+  left, orange on the right, mirror images of the configured spot - as soon as both show, each title and landing
+  ring in its team's colour. `[panel] side`: `"auto"` (the default), `"team"` (always) or `"fixed"` (never).
+  The overlays find each other through small notes in a temp folder (`overlay.share`); docs/howto/team-modes.md.
+
 ## [0.3.1] - 2026-10-18
 
 ### Fixed

@@ -1,6 +1,8 @@
 # The compact thoughts panel: the same readings in about half the room, for watching a game rather than studying it.
 # On the right, below the game's event feed (goal and assist banners, top-right) and above the boost meter, clear of
 # the spectator card (bottom-left); smaller text, one line where the default keeps two, one feature where it lists three.
+# When the other team shows its thoughts too, the blue team's panel moves to the mirror-image spot on the left
+# ([panel] side = "auto"; see panel_example.toml).
 #
 #     with_thoughts(MyBot, pack="thoughts.npz", panel="compact")
 #
