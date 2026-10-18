@@ -98,6 +98,43 @@ panel.toml is fine, and everything it shows is in thoughts.npz.
 writes a panel file if you don't have one yet.) If something is
 missing, it says what and how to add it.
 
+### A bot whose input can't be rebuilt
+
+"Looking at" rebuilds your bot's input from swapped game states with its obs function. A bot whose input holds more
+than the game state (timers it keeps, its own ball predictions) can split its input itself instead: give its policy a
+`codec` ([how](bring-your-own-policy.md#a-bot-whose-input-cant-be-rebuilt-from-the-game)) and put recorded inputs in
+the pack:
+
+```python
+ci.overlay.add_input_donors(pack, {2: inputs_1v1, 4: inputs_2v2, 6: inputs_3v3})   # by the number of cars in the match
+```
+
+The row then splits the bot's real input of the moment, part by part, against those - the same Shapley split, on the
+input's own parts.
+
+### A critic that needs more than the input
+
+The outlook bar can come from your bot's critic. If the critic needs more than the network's input - a privileged
+view of the game your bot builds in training - pass that along: a critic factory whose function takes `state` gets the
+game, and `extras` adds your bot's own arrays to it after each decision:
+
+```python
+def my_extras(bot, packet):                          # in your bot's process, after its controls are sent
+    return {"my_state": bot.state_array.copy()}
+
+def make_critic(model):                              # in the overlay's worker
+    net = load_critic_net(model)
+    def value(obs, state=None, cars=None):           # state: the game, with "my_state" in it
+        return net(obs, critic_extra(state["my_state"], cars))
+    return value
+
+with_thoughts(MyBot, pack="thoughts.npz", policy=("my_bot.interp:make_policy", {"model": "model.pt"}),
+              critic=("my_bot.interp:make_critic", {"model": "model.pt"}), extras=my_extras)
+```
+
+A factory name can come with keyword arguments, as a pair: `("module:factory", {"model": "model.pt"})` - handy when one
+function builds several checkpoints.
+
 ## How to read "Why this move"
 
 Each line is a named feature and its **push**: how much it raises the chance of this exact move. Pushes are in the

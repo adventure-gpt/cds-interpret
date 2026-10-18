@@ -128,6 +128,33 @@ policy = ci.Policy(net, obs=my_obs, actions=MY_ACTIONS, mirror=lambda frames, me
 It then says the bot's moves the way they're really sent, and fits the live landing ring in the bot's own frame and
 turns it back for drawing. See [a bot that sees the field mirrored](probes.md#a-bot-that-sees-the-field-mirrored).
 
+### A bot whose input can't be rebuilt from the game
+
+Some bots build their input from more than the game state the toolkit keeps: boost pads, timers they count between
+packets, a ball path from their own simulator. Your obs function can't rebuild such an input from a moment, and
+"looking at" needs exactly that - it swaps parts of the moment and rebuilds the input. Give the policy a **codec**
+instead: an object that splits the network's input itself, by entity, and builds it back.
+
+```python
+from cds_interpret.attribution import Group
+
+class MyCodec:
+    def decompose(self, x):                 # [N, D] inputs -> parts, one row per input
+        return {"me": x[:, :20], "ball": x[:, 20:32], "others": x[:, 32:].reshape(len(x), 5, -1),
+                "others:role": roles_of(x)}       # per slot: 0 absent, 1 team-mate, 2 opponent
+    def compose(self, parts):               # parts -> [N, D] inputs, exactly as the bot builds them
+        return torch.cat([parts["me"], parts["ball"], parts["others"].reshape(len(parts["me"]), -1)], 1)
+    def groups(self, parts):                # which parts are which entity, for this moment
+        return {"own car": Group("me"), "ball": Group("ball"),
+                "opponents": Group("others", role=2), "team-mates": Group("others", role=1)}
+
+policy = ci.Policy(net, actions=MY_ACTIONS, codec=MyCodec())
+```
+
+`compose(decompose(x))` must give `x` back. The pack then keeps recorded inputs rather than recorded moments -
+`ci.overlay.add_input_donors(pack, {4: inputs_from_2v2_games, 6: inputs_from_3v3_games})` - and "looking at" splits the
+bot's real input against them ([why this move, and what it's looking at](why-and-looking.md#a-bot-whose-input-cant-be-rebuilt)).
+
 ## Networks with more than one part
 
 If your network is an actor and a critic together, tell the toolkit which part picks the actions:

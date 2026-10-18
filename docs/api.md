@@ -17,7 +17,7 @@ N moments, C cars, D numbers per layer or input, A actions. Every function's own
 
 `cds_interpret.policy` - [how-to](howto/bring-your-own-policy.md)
 
-**`Policy(net, obs=None, forward=None, output="logits", actions=None, value=None, name="policy", device="cpu", mirror=None)`**
+**`Policy(net, obs=None, forward=None, output="logits", actions=None, value=None, name="policy", device="cpu", mirror=None, codec=None)`**
 Your bot as the toolkit sees it.
 
 | member | |
@@ -29,6 +29,7 @@ Your bot as the toolkit sees it.
 | `value(x)` | the critic's values [N], or None without one |
 | `observe(frames, me)` | the network's input for moments seen by car slots `me` (needs `obs`) |
 | `mirrored(frames, me)` | [N] bool: the moments a bot that mirrors the field sees mirrored (`mirror=`; all False without) |
+| `codec` | an object splitting the network's input by entity - `decompose(x)`, `compose(parts)`, `groups(parts)` - for "looking at" on a bot whose input can't be rebuilt from game state |
 | `layers(example)` | `list[LayerInfo]`: every module, its type and output shape on the example inputs |
 | `default_layers(example)` | the hidden layers after their nonlinearity |
 | `activations(x, layers, batch=4096)` | `{path: [N, D]}` |
@@ -296,10 +297,11 @@ Each function's docstring gives its arguments and what it returns.
 | `add_land(pack, module, w [D, 2], b [2], info=None, frame="team")` | the landing marker from its own layer (`frame="mirrored"`: fitted in a mirroring bot's own frame) |
 | `add_decoders(pack, sae)` | the named features' decoder directions, for "why this move" (refuses an SAE the features didn't come from) |
 | `add_donors(pack, moments, me=None, n=32, seed=0, skip_kickoffs=True)` | up to `n` real recorded moments per number of cars (a Moments, a list of them, or Frames with `me`), for "looking at" |
+| `add_input_donors(pack, {cars: inputs}, n=32, seed=0)` | recorded network inputs per number of cars, for "looking at" by the policy's own codec |
 | `save_pack(pack, path)`, `load_pack(path)` | `.npz`, no pickles (format version 2; version 1 packs load) |
 | `Thoughts(pack)` | `read(h, output)` (h: the pack layer's values), `land_xy(h_land)` (the values of the layer named in `pack["land"]["module"]`, which may be another layer), `outlook_value(h)`, `names`, `fd` [F, D] decoder directions (or None), `donors` [(Frames, me)], `donor_cars()` |
-| `with_thoughts(BotClass, pack, network=None, panel=None, hooks=None, input_layer="", critic=None, worker=True, title=None, draw_every=None, x=None, y=None, policy=None, error_log=None)` | your RLBot v5 bot class (a Bot or a Hivemind) with the overlay. `policy`: `"module:factory"` returning your `ci.Policy`, built in the worker, for "why this move" and "looking at" (a Policy object with `worker=False`); `error_log`: a file for its errors |
-| `watch_thoughts(policy, pack, cars, panel=None, hooks=None, title=None, team_sizes=None, error_log=None)` | an RLBot v5 Script class drawing the thoughts of a bot you can't modify: `cars` a piece of its name, player indices or a function of the packet (`match_cars`); `cds-interpret watch-template` writes one ([how-to](howto/watch-a-bot.md)) |
+| `with_thoughts(BotClass, pack, network=None, panel=None, hooks=None, input_layer="", critic=None, worker=True, title=None, draw_every=None, x=None, y=None, policy=None, error_log=None, extras=None)` | your RLBot v5 bot class (a Bot or a Hivemind) with the overlay. `policy` / `critic`: `"module:factory"` or `("module:factory", {kwargs})`, built in the worker (a Policy object with `worker=False`); a critic taking `state` gets the game; `extras(bot, packet) -> {name: array}` adds your bot's own state to it; `error_log`: a file for its errors |
+| `watch_thoughts(policy, pack, cars, panel=None, hooks=None, title=None, team_sizes=None, error_log=None, observe=None)` | an RLBot v5 Script class drawing the thoughts of a bot you can't modify: `cars` a piece of its name, player indices or a function of the packet (`match_cars`); `observe(packet, cars, field_info)` -> inputs or {"obs", "mirrored", "mask", "state"} when the obs function isn't enough; `cds-interpret watch-template` writes one ([how-to](howto/watch-a-bot.md)) |
 | `Explainer(thoughts, policy, seed=0, freeze=True)` | the two decision readings: `why(x, h, action, acts=None)` -> [{"name", "push"}], `looking(state, me, action, donors=3)` -> {part: share}; `available`, `notes` |
 | `load_policy(spec)`, `try_readings(pack, policy, donors=3)` | a Policy from `"module:factory"`; both readings tried on the pack's own moments: {"why_ms", "looking_ms", "problems"} |
 | `Follow(rules=("camera", "last", "random"), seed=0)` | team modes: `pick(ours, spectated)` -> (player index or None, rule), `update(ours, spectated)` every packet |

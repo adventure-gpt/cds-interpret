@@ -3,6 +3,26 @@
 All notable changes to cds-interpret are written down here. The project follows
 [Semantic Versioning](https://semver.org); before 1.0, minor versions may change the API (each change is listed).
 
+## [0.3.0] - unreleased
+
+Hooks for bots whose world is bigger than the generic game state, so the overlay and the watch script serve them
+exactly - found moving a large self-play bot's own overlay onto the toolkit.
+
+### Added
+
+- **Factories with arguments**: `policy=`, `critic=` and `observe=` may be `("package.module:factory", {keyword
+  arguments})`, so one function builds several checkpoints in the worker or the script.
+- **A critic that sees the game** (`with_thoughts(..., critic=...)`): a critic function taking `state` (and `cars`)
+  gets the game as one packet's fields - plus whatever `extras(bot, packet)` adds from your bot's own state after each
+  decision (`with_thoughts(..., extras=...)`), for a critic with privileged inputs.
+- **"Looking at" by the policy's own codec** (`Policy(codec=...)`, `overlay.add_input_donors`): a bot whose input can't
+  be rebuilt from game state splits its input by entity itself (decompose / compose / groups); the pack keeps recorded
+  inputs per number of cars, and the same exact Shapley split runs on the input's own parts.
+- **`watch_thoughts(..., observe=...)`**: the bot's inputs from the raw packet (boost pads, timers kept between
+  packets), with optional mirror flags (the ring and the move's words turned back) and action masks.
+- **Action masks** in the worker (`compute` reads `mask` [n, A]): the panel's move is chosen among the actions each car
+  may take, as the bot chooses.
+
 ## [0.2.0] - 2026-10-17
 
 The live overlay in 2v2 and 3v3, two new rows that say why the bot makes each move, a panel that keeps going through

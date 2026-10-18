@@ -86,6 +86,30 @@ Add `watch.script.toml` to the match as a script, beside the bot. Check your pac
 cds-interpret check-panel panel.toml thoughts.npz --policy my_port:make_policy
 ```
 
+### When the obs function isn't enough
+
+The script builds each input from the game state with your policy's obs function. Some bots need more than a packet's
+game state gives - boost pads, timers they count between packets, which actions their state allows. Give the script an
+`observe` function instead, which gets the raw packet:
+
+```python
+class Observer:
+    def __init__(self, model):
+        self.port = None                                 # kept between packets: timers, a pad map ...
+    def __call__(self, packet, cars, field_info):
+        if self.port is None:
+            self.port = TheirObsPort(field_info)
+        x, mirrored = self.port.observe(packet, cars)    # their input for these cars, and how they see the field
+        return {"obs": x, "mirrored": mirrored, "mask": self.port.allowed_actions(packet, cars)}
+
+watch_thoughts(POLICY, PACK, cars=CARS, observe=("my_port:Observer", {"model": "their_weights.pt"}))
+```
+
+It returns the inputs `[n, ...]`, or a dict with `"obs"` and, when the bot has them, `"mirrored"` (the cars that see
+the field turned round: the landing ring and the move's words are turned back), `"mask"` `[n, A]` (the actions each car
+may take: the panel's move is chosen among them, as the bot chooses) and `"state"` (more of the game, for a critic or
+a codec). Given as `"module:factory"` (with its keyword arguments as a pair), it is built when the script starts.
+
 ## What it can and can't show
 
 | row | shows when |
