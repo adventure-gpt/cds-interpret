@@ -131,6 +131,11 @@ A bot that sees the field mirrored at some moments (one side as the other) needs
 policy, so the landing ring and the move's words come out right - see
 [probes you show live](probes.md#a-bot-that-sees-the-field-mirrored).
 
+Beside your own bot's overlay on the other team, the watch script and the overlay share one panel: it shows the car
+the camera is on, whichever of the two bots drives it, at one size, the biggest of the two panels
+([both teams](team-modes.md#both-teams-showing-their-thoughts)). Give the script its own `title=` so you can tell
+whose thoughts are on screen.
+
 ## Safe by design
 
 - **It can't change how the bot plays.** It's a separate program the bot doesn't know about; it only reads the game

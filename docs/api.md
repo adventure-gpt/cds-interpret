@@ -319,14 +319,21 @@ functions. `cds_interpret.overlay.team`: `check_follow`, `check_landing_for`, `c
 
 | | |
 |---|---|
-| `PanelConfig(...)`, `PanelConfig.load(path)`, `PanelConfig.from_dict(d)` | the whole panel: `title`, `x`, `y`, `width`, `text_scale`, `title_scale`, `smoothing`, `hold`, `draw_every`, `value_scale`, `keep_size`, `follow`, `subtitle`, `colors`, `markers`, `features`, `rows`; `rows_of(kind)`, `wants` (what it asks the worker for) |
+| `PanelConfig(...)`, `PanelConfig.load(path)`, `PanelConfig.from_dict(d)` | the whole panel: `title`, `x`, `y`, `share`, `width`, `text_scale`, `title_scale`, `smoothing`, `hold`, `draw_every`, `value_scale`, `keep_size`, `follow`, `subtitle`, `colors`, `markers`, `features`, `rows`; `rows_of(kind)`, `wants` (what it asks the worker for), `place(team, crowded)` (its left edge), `team_coloured(team, crowded)`. `load` also takes a built-in panel by name: `"default"`, `"compact"` (`preset_text(name)` gives its TOML) |
 | `RowSpec(kind, label, source, color, scale, format, text, lines, max, empty, features, words, threshold, height, hook, min_push, strong, against, every, donors, legend)` | one row; kinds: outlook, action, why, looking, noticing, probes, bar, percent, seconds, value, centred, text, spacer, custom |
 | `FeatureStyle(label, threshold, show, color)` | a feature's look |
 | `Markers(landing, landing_for, landing_color, landing_radius, landing_line, landing_smooth, prediction, prediction_color, car_label, car_label_from, car_label_color, hook)` | the 3D markers; `landing_cars` ("none" when `landing` is off) |
-| `Panel(config, hooks=None)` | ready to draw: `draw(renderer, flat, thoughts, car_index, landing_true, landing_think, state, frame, value_scale, team, marks=None, subtitle=None, available=None)` (thoughts None: only the markers) |
+| `Panel(config, hooks=None)` | ready to draw: `draw(renderer, flat, thoughts, car_index, landing_true, landing_think, state, frame, value_scale, team, marks=None, subtitle=None, available=None, crowded=False, box=None)` (thoughts None: only the markers; `crowded`: overlays of both teams run; `box`: the shared panel's (x, y, width, height)); `measure(flat, thoughts, subtitle=None, available=None, team=None, crowded=False)` -> its own (x, y, width, height), nothing drawn |
 | `RowDrawer` | what a custom row hook draws with: `line()`, `bar()`, `stacked()`, `spans()`, `blank()`, `gap()`, `color()`, `named()` |
 | `check_panel(config, pack)` | what in a config doesn't match a pack (rows, styles and lists naming probes or features it doesn't have; why / looking rows of your own without what they need), in words; `[]` when all is well |
 | `WorkerLink(target, *args)`, `compute(thoughts, msg, critic=None, explainer=None)` | the worker process (`hello`: its ready message, with what it can compute) and what it computes |
+
+`cds_interpret.overlay.share` - both teams' overlays in one panel ([how-to](howto/team-modes.md#both-teams-showing-their-thoughts))
+
+| | |
+|---|---|
+| `Neighbours(folder=None, pid=None, pick=None)` | this overlay's note and the others': `beat(cars, teams, spectated, box=None)` every frame, `alive()`, `owns_panel(cars, spectated)` (does this one draw the shared panel now), `crowded(teams)` (an overlay of another team runs), `shared_box(own)` (the box holding every overlay's panel), `others()`, `close()` |
+| `overlay_dir()` | where the notes are: `$CDS_INTERPRET_OVERLAYS`, else `cds-interpret-overlays` in the temp folder |
 
 ## Keeping a pack across checkpoints
 

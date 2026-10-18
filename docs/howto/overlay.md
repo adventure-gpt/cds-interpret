@@ -95,6 +95,7 @@ Other options:
 
 | option | what it does |
 |---|---|
+| `panel="compact"` | the built-in compact panel: the same readings in about half the room, on the right below the game's event feed - for watching a match ([customize the panel](customize-the-panel.md#a-smaller-panel-ready-made)) |
 | `panel="panel.toml"` | your own panel design - see [customize the panel](customize-the-panel.md) |
 | `hooks={"name": function}` | functions your panel file uses for custom rows or markers |
 | `policy="my_module:make_policy"` | your bot's `ci.Policy` (the same network, with its obs function), built in the overlay's own process: switches on "why this move" and "looking at" ([how](why-and-looking.md)), and the outlook bar from its critic if it has one |
@@ -107,6 +108,12 @@ Other options:
 In 2v2 and 3v3 every car of your bot gets its own landing ring, and the panel shows the car you follow with the
 spectator camera - a `Hivemind` bot or one copy of your bot per car alike. [Team modes](team-modes.md) explains the
 choices (a fixed car, a random one, only while you watch).
+
+When the other team shows its thoughts too - your bot on both sides, or another bot with its own overlay or a
+[watch script](watch-a-bot.md) - the overlays share **one panel**, where your panel file puts it. It shows the car the
+camera is on, whichever bot drives it; only that bot's overlay draws it. It keeps one size, the biggest of their
+panels, so only what's inside changes as the camera moves; each team's title and rings take its colour. They find each
+other through small notes in a temp folder; nothing to set up. [Both teams](team-modes.md#both-teams-showing-their-thoughts).
 
 ### 3. Play
 
@@ -174,7 +181,8 @@ cds-interpret: thoughts overlay off (panel.toml [panel]: unknown key 'widht'. Di
 A typo in your panel file. Fix it and restart the match.
 
 **Two panels on top of each other in 2v2 or 3v3.** The copies of your bot don't recognise each other: start them all
-from the same `bot.toml`. See [team modes](team-modes.md#when-something-looks-wrong).
+from the same `bot.toml`. With bots on both teams showing thoughts, they share one panel by themselves - unless a
+panel file says `share = "none"`. See [team modes](team-modes.md#when-something-looks-wrong).
 
 **"Why this move" or "Looking at" doesn't show.** The bot's log says why when the overlay starts; usually `policy=`
 is missing, or the pack is from before 0.2. See [the rows' guide](why-and-looking.md#when-something-goes-wrong).

@@ -13,7 +13,7 @@ library code to edit.
 
 If the default panel takes too much of the screen while you just want to watch, use the compact one: the same
 readings in about half the room, on the right below the game's event feed (clear of the spectator card and the boost
-meter), with smaller text.
+meter), with smaller text. When both teams show their thoughts, they share this one spot (`share`, below).
 
 ```python
 with_thoughts(MyBot, pack="thoughts.npz", panel="compact")
@@ -92,6 +92,7 @@ check when it starts and writes what it finds to the bot's log.)
 | `keep_size` | `true` | every row keeps room for its longest answer, so the panel never changes size ([below](#a-panel-that-keeps-its-size)) |
 | `follow` | `["camera", "last", "random"]` | in 2v2 and 3v3, whose thoughts the panel shows ([team modes](team-modes.md#choosing-whose-thoughts-follow)) |
 | `subtitle` | `"car {car} of {cars} - {rule}"` | in 2v2 and 3v3, the line under the title; `""` for none ([team modes](team-modes.md#the-line-under-the-title-subtitle)) |
+| `share` | `"one"` | with overlays on both teams: `"one"` - they share one panel here, following the camera over all their cars, as big as the biggest of theirs; `"sides"` - each its own, blue on the left and orange on the right; `"none"` - each as if alone ([both teams](team-modes.md#both-teams-showing-their-thoughts)) |
 
 Long text is always cut to fit the width (with a `~` at the end), so a narrow panel never spills over.
 

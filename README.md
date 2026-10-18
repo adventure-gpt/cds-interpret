@@ -109,13 +109,17 @@ network saw. The [quickstart](docs/quickstart.md) walks through both ways, step 
   opponents, the team-mates. [Why this move, and what it's looking at](docs/howto/why-and-looking.md).
 - **2v2 and 3v3 too.** Every car gets its own landing ring, and the panel follows the car you watch with the
   spectator camera - or a fixed car, or one picked for the match. [Team modes](docs/howto/team-modes.md).
+- **Both teams at once.** The same bot on both sides, or two bots that each show their thoughts: they share one panel,
+  which shows whichever car the camera is on and keeps one size, and each team's rings and title take its colour.
+  [Both teams](docs/howto/team-modes.md#both-teams-showing-their-thoughts).
 - **Watch a bot you can't modify.** A small RLBot script draws the same panel over a bot that runs on its own - a
   compiled bot, one in another language - from its weights and a port of its observation.
   [Thoughts for a bot you can't modify](docs/howto/watch-a-bot.md).
 - **Keep your panel as your bot trains.** One command carries a pack's names over to a newer checkpoint, by what the
   features fire on, and refits the rest. [Keep your panel](docs/howto/keep-your-panel.md).
 - **Design your own panel.** Pick the rows, names, colours, size and position in a small TOML file, or draw your own
-  rows in Python. [Customize the panel](docs/howto/customize-the-panel.md).
+  rows in Python - or take the built-in compact one (`panel="compact"`), the same readings in half the room, for
+  watching a match. [Customize the panel](docs/howto/customize-the-panel.md).
 - **Record games three ways.** In RocketSim against itself or a scripted opponent, in the real game through RLBot, or
   in your own RLGym environment.
 - **See what a decision rests on.** Was it the ball, its own car or the opponent? Which of its ideas tipped it?
@@ -147,7 +151,7 @@ network saw. The [quickstart](docs/quickstart.md) walks through both ways, step 
 | [Check your tools](docs/howto/check-your-tools.md) | how to tell when a technique is misleading you |
 | [Watch it think in RLBot](docs/howto/overlay.md) | the live thoughts overlay |
 | [Why this move, and what it's looking at](docs/howto/why-and-looking.md) | the panel's two rows about each decision: how to read them, what they cost |
-| [Team modes](docs/howto/team-modes.md) | 2v2 and 3v3: a ring for every car, a panel that follows the camera |
+| [Team modes](docs/howto/team-modes.md) | 2v2 and 3v3: a ring for every car, a panel that follows the camera; both teams' thoughts in one panel |
 | [Thoughts for a bot you can't modify](docs/howto/watch-a-bot.md) | a display-only script over a bot that runs on its own |
 | [Keep your panel when your bot trains on](docs/howto/keep-your-panel.md) | a pack carried over to a newer checkpoint, in one command |
 | [Customize the panel](docs/howto/customize-the-panel.md) | every option of the panel's TOML file, and Python hooks |

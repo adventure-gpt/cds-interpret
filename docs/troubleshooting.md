@@ -6,7 +6,7 @@ what to do.
 A good first step for anything: run `cds-interpret doctor`. It lists what's installed and what's ready.
 
 ```text
-cds-interpret 0.1.0 on Python 3.12.10 (Windows)
+cds-interpret 0.5.0 on Python 3.12.10 (Windows)
   torch      2.14.1+cpu
   ...
 Ready: probes, features, edits, reports (always); recording in RocketSim; RLGym bridges; the RLBot overlay and recorder
@@ -211,6 +211,11 @@ the overlay also writes them to the bot's log when it starts.
 **Two panels on top of each other in 2v2 or 3v3.**
 The copies of your bot don't recognise each other as the same bot, so each draws a panel. Start them all from the
 same `bot.toml` (the same agent id). See [team modes](howto/team-modes.md#when-something-looks-wrong).
+
+**Both teams show their thoughts and the panels overlap, or both show.**
+They should share one panel by themselves. Check that neither panel file says `share = "none"`, and that both bots
+run as the same Windows user (they meet in a folder in that user's temp directory; `$CDS_INTERPRET_OVERLAYS` points
+both at another one).
 
 **The panel shows a car I'm not watching.**
 RLBot tells bots only which player the host's camera followed *most recently*, and says player 0 before anything was
