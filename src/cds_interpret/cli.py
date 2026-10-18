@@ -76,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     pn = sub.add_parser("panel", help="write an example panel config (every option, commented) to customize")
     pn.add_argument("path", nargs="?", default="panel.toml", help="where to write it (default: panel.toml)")
     pn.add_argument("--force", action="store_true", help="overwrite the file if it exists")
+    pn.add_argument("--compact", action="store_true", help="the compact panel (top-right, smaller) instead of the default")
     ck = sub.add_parser("check-panel", help="check a panel config, and that what it shows is in your pack")
     ck.add_argument("path", help="the panel config (a .toml file)")
     ck.add_argument("pack", nargs="?", help="the thoughts pack it will show (a .npz file)")
@@ -109,14 +110,13 @@ def main(argv: list[str] | None = None) -> int:
         doctor()
         return 0
     if args.cmd == "panel":
-        from importlib.resources import files
         from pathlib import Path
         out = Path(args.path)
         if out.exists() and not args.force:
             print(f"{out} already exists - pass --force to overwrite it")
             return 1
-        out.write_text(files("cds_interpret.overlay").joinpath("panel_example.toml").read_text(encoding="utf-8"),
-                       encoding="utf-8")
+        from .overlay.panel import preset_text
+        out.write_text(preset_text("compact" if args.compact else "default"), encoding="utf-8")
         print(f"Wrote {out}. Change what you like, then pass it to the overlay: with_thoughts(..., panel=\"{out}\")")
         return 0
     if args.cmd == "check-panel":

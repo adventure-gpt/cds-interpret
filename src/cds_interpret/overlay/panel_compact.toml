@@ -1,0 +1,49 @@
+# The compact thoughts panel: the same readings in about half the room, for watching a game rather than studying it.
+# Top-right (clear of the spectator card bottom-left and the boost meter bottom-right), smaller text, a lighter
+# background, one line where the default keeps two, one feature where it lists three.
+#
+#     with_thoughts(MyBot, pack="thoughts.npz", panel="compact")
+#
+# To change it, write it out (cds-interpret panel --compact panel.toml) and edit that file; panel_example.toml (from
+# cds-interpret panel) has every option with a comment.
+
+[panel]
+x = 0.836
+y = 0.09
+width = 0.15
+text_scale = 0.8
+title_scale = 0.9
+subtitle = "car {car} of {cars}"
+
+[colors]
+background = [0, 0, 0, 110]
+
+[[rows]]
+kind = "outlook"
+label = "Outlook"
+words = ["in trouble", "even", "good"]
+
+[[rows]]
+kind = "action"
+label = "Next"
+lines = 1
+
+[[rows]]
+kind = "why"
+label = "Why"
+max = 1
+against = false
+empty = "-"
+
+[[rows]]
+kind = "looking"
+label = "Looking at"
+
+[[rows]]
+kind = "noticing"
+label = "Noticing"
+max = 1
+empty = "-"
+
+[[rows]]
+kind = "probes"

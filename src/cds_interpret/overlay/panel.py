@@ -279,18 +279,37 @@ class PanelConfig:
 
     @classmethod
     def load(cls, path: str | os.PathLike[str]) -> PanelConfig:
-        """A panel from a TOML file (see ``cds-interpret panel`` for an example of every option)."""
+        """A panel from a TOML file (see ``cds-interpret panel`` for an example of every option), or a built-in one by
+        name: ``"default"`` or ``"compact"`` (when no file of that name exists)."""
         p = Path(path)
-        if not p.exists():
-            raise CDSInterpretError(f"no panel config at {p} (write an example with: cds-interpret panel {p.name})")
+        if not p.exists() and str(path) in PRESETS:
+            text = preset_text(str(path))
+        elif not p.exists():
+            presets = ", ".join(f'"{k}"' for k in PRESETS)
+            raise CDSInterpretError(f"no panel config at {p} (write an example with: cds-interpret panel {p.name}; "
+                                    f"or use a built-in one: {presets})")
+        else:
+            text = p.read_text(encoding="utf-8")
         try:
-            d = tomllib.loads(p.read_text(encoding="utf-8"))
+            d = tomllib.loads(text)
         except tomllib.TOMLDecodeError as e:
             hint = (" A [table] may appear only once in a file: put these lines in the one that's already there "
                     "(the file from `cds-interpret panel` has every table, most lines commented out with #)."
                     if "twice" in str(e) else "")
             raise CDSInterpretError(f"{p} is not valid TOML: {e}.{hint}") from None
         return cls.from_dict(d, where=str(p.name))
+
+
+# The built-in panels, by name: with_thoughts(..., panel="compact"), cds-interpret panel --compact.
+PRESETS = {"default": "panel_example.toml", "compact": "panel_compact.toml"}
+
+
+def preset_text(name: str) -> str:
+    """The TOML of a built-in panel (a key of PRESETS)."""
+    from importlib.resources import files
+    if name not in PRESETS:
+        raise CDSInterpretError(f"no built-in panel {name!r} (there are: {', '.join(PRESETS)})")
+    return files("cds_interpret.overlay").joinpath(PRESETS[name]).read_text(encoding="utf-8")
 
 
 def _rgba(c: Any, what: str) -> tuple[int, ...]:

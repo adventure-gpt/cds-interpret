@@ -20,6 +20,9 @@ exactly - found moving a large self-play bot's own overlay onto the toolkit.
   inputs per number of cars, and the same exact Shapley split runs on the input's own parts.
 - **`watch_thoughts(..., observe=...)`**: the bot's inputs from the raw packet (boost pads, timers kept between
   packets), with optional mirror flags (the ring and the move's words turned back) and action masks.
+- **A compact panel** (`panel="compact"`, `cds-interpret panel --compact`): the same readings in about half the
+  room, top-right, smaller text, a lighter background - for watching rather than studying. `panel="default"` names
+  the default one; a file of the same name still wins.
 - **Action masks** in the worker (`compute` reads `mask` [n, A]): the panel's move is chosen among the actions each car
   may take, as the bot chooses.
 

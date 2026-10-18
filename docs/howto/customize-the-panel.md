@@ -9,6 +9,22 @@ You can change almost everything about it - which rows appear, their names and c
 "firing", where the panel sits, how wide it is, whose thoughts it shows in 2v2 and 3v3 - with a small text file. No
 library code to edit.
 
+## A smaller panel, ready-made
+
+If the default panel takes too much of the screen while you just want to watch, use the compact one: the same
+readings in about half the room, in the top-right corner (clear of the spectator card and the boost meter), with smaller
+text and a lighter background.
+
+```python
+with_thoughts(MyBot, pack="thoughts.npz", panel="compact")
+```
+
+To tweak it, write it out and edit it like any panel file:
+
+```bash
+cds-interpret panel --compact panel.toml
+```
+
 ## The two-minute version
 
 Write the example file, which draws exactly the default panel:
