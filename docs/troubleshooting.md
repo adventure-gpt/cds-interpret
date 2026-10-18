@@ -6,7 +6,7 @@ what to do.
 A good first step for anything: run `cds-interpret doctor`. It lists what's installed and what's ready.
 
 ```text
-cds-interpret 0.5.0 on Python 3.12.10 (Windows)
+cds-interpret 0.5.1 on Python 3.12.10 (Windows)
   torch      2.14.1+cpu
   ...
 Ready: probes, features, edits, reports (always); recording in RocketSim; RLGym bridges; the RLBot overlay and recorder

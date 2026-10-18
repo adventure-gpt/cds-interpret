@@ -3,6 +3,14 @@
 All notable changes to cds-interpret are written down here. The project follows
 [Semantic Versioning](https://semver.org); before 1.0, minor versions may change the API (each change is listed).
 
+## [0.5.1] - 2026-10-18
+
+### Documentation
+
+- The README and the guides now describe how both teams' thoughts share one panel (0.5.0) and the built-in compact
+  panel: the overlay and team-modes guides, the panel options (`[panel] share`), the watch script, troubleshooting
+  and the API reference. No code changes.
+
 ## [0.5.0] - 2026-10-18
 
 ### Changed
