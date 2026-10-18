@@ -8,11 +8,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import torch
 
 import cds_interpret as ci
+from cds_interpret import effects as EF
 
 HERE = Path(__file__).resolve().parent
+CONTROLS = ["throttle", "steer right", "nose up", "yaw right", "roll right", "jump", "boost", "handbrake"]
+DOES = ["drive forward", "steer right", "nose up", "turn right", "roll right", "jump", "boost", "handbrake"]
 
 
 def main() -> None:
@@ -31,6 +35,18 @@ def main() -> None:
         if name not in named:
             named[name] = j
             print(f"  feature {j}: {name} (AUROC {auroc:.2f}, {lift:.1f}x as likely when it fires)")
+    # ... and a few after what they make the bot DO (their effect on its controls), since the features labels name best
+    # are rarely the ones its moves rest on: these are the ones the panel's "why this move" row will mostly show
+    fx = EF.feature_effects(feats.sae, policy.net.head, study.activations("body.3")[study.test], table=policy.actions)
+    per = EF.per_feature(fx, feats.sae.m)
+    for j in sorted(per, key=lambda j: -per[j]["kl"] * per[j]["freq"]):
+        if len(named) >= 6 or j in named.values():
+            continue
+        c = int(np.argmax(np.abs(per[j]["dctl"])))
+        name = ("wants to " if per[j]["dctl"][c] > 0 else "doesn't want to ") + DOES[c]
+        if name not in named:
+            named[name] = j
+            print(f"  feature {j}: {name} ({EF.effect_words(per[j], CONTROLS)})")
     pack = study.make_pack("body.3", features=named,
                            probes={"Threat on goal": "threat", "First to the ball": "first_to_ball",
                                    "Time to the ball": ("ttb_me", {"unit": "s"})},
