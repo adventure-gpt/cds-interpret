@@ -214,19 +214,24 @@ class FeatureSet:
         return [j for _, j in cand[:n]]
 
     def detectors(self, min_auroc: float = 0.8, min_lift: float = 3.0, min_freq: float = 0.002,
-                  top: int = 8) -> list[tuple[int, str, float, float]]:
-        """Features that detect a yes / no label cleanly: [(feature, label, AUROC, lift)], each feature once (at its
-        best label), the best first - the easiest features to name, and good candidates for the live overlay."""
-        best: dict[int, tuple[float, str, float]] = {}
+                  top: int = 8, min_ap: float = 0.1, min_ap_lift: float = 4.0) -> list[tuple[int, str, float, float]]:
+        """Features that detect a yes / no label clearly: [(feature, label, AUROC, lift)], each feature once (at its
+        best label), the best first - the easiest features to name, and good candidates for the live overlay. A
+        feature counts when its precision is at least max(min_ap, min_ap_lift x the label's base rate) - what decides
+        for a sparse feature, whose AUROC stays low even when it detects well - or its AUROC is at least min_auroc
+        with a lift of min_lift (analysis.detects)."""
+        best: dict[int, tuple[float, str, float, float]] = {}
         for j, rel in self.relations.items():
             if self.freq[j] < min_freq:
                 continue
             for k, r in rel.items():
-                if "auroc" in r and r["auroc"] >= min_auroc and r.get("lift", 0) >= min_lift \
-                        and r["auroc"] > best.get(j, (0.0, "", 0.0))[0]:
-                    best[j] = (r["auroc"], k, r["lift"])
-        out = sorted(((j, k, a, lift) for j, (a, k, lift) in best.items()), key=lambda t: -t[2])
-        return out[:top]
+                if not analysis.detects(r, min_auroc, min_lift, min_ap, min_ap_lift):
+                    continue
+                s = analysis.relation_strength(r)
+                if s > best.get(j, (-1.0, "", 0.0, 0.0))[0]:
+                    best[j] = (s, k, r["auroc"], r.get("lift", float("nan")))
+        out = sorted(best.items(), key=lambda t: -t[1][0])
+        return [(j, k, a, lift) for j, (_, k, a, lift) in out[:top]]
 
     def apply_names(self, names: Any) -> FeatureSet:
         """Use the confirmed names of a names file (a path or names.Names) for this set's features."""

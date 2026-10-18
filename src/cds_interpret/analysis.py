@@ -16,11 +16,26 @@ from .frames import Frames, canon, team_sign
 from .probes import auroc
 
 
+def sparse_ap(v_on: np.ndarray, pos_on: np.ndarray, n_pos: int, n: int) -> float:
+    """Average precision of a feature as a detector of a yes / no label: its firing rows ranked by size (v_on, with
+    pos_on True where the label holds), and every row where it is off tied at the bottom - those count at the
+    precision of taking all n rows (the base rate), not in whatever order they happen to be stored. n_pos: the label's
+    positives among all n rows."""
+    if n_pos <= 0 or n <= 0:
+        return float("nan")
+    o = np.argsort(-np.asarray(v_on, np.float64), kind="mergesort")
+    p = np.asarray(pos_on, bool)[o]
+    tp = np.cumsum(p)
+    hits = float((tp / np.arange(1, len(p) + 1))[p].sum()) if len(p) else 0.0
+    return (hits + (n_pos - int(p.sum())) * n_pos / n) / n_pos
+
+
 def label_relations(act: np.ndarray, labels: dict[str, np.ndarray], kinds: dict[str, str],
                     min_pos: int = 30) -> dict[str, dict]:
     """For a feature's activation act [N] (0 where it is off): per label, AUROC of act as a detector (binary labels)
     or Pearson r (regression labels), on the rows where the label is defined; also, for binary labels, P(label |
-    feature on) against the base rate (the lift)."""
+    feature on) against the base rate (the lift), and the average precision ("ap": what decides for a sparse
+    feature - see relation_strength)."""
     act = np.asarray(act, np.float64)
     on = act > 0
     out = {}
@@ -36,9 +51,11 @@ def label_relations(act: np.ndarray, labels: dict[str, np.ndarray], kinds: dict[
                 continue
             base = pos / len(yy)
             p_on = float((yy[on[v]] > 0.5).mean()) if on[v].any() else float("nan")
+            onv = on[v]
             out[k] = {"auroc": auroc(a, yy), "base": base, "p_given_on": p_on,
                       "lift": p_on / base if base > 0 and np.isfinite(p_on) else float("nan"),
-                      "recall": float((on[v] & (yy > 0.5)).sum() / pos), "coverage": float(v.mean())}
+                      "recall": float((onv & (yy > 0.5)).sum() / pos), "coverage": float(v.mean()),
+                      "ap": sparse_ap(a[onv], yy[onv] > 0.5, pos, len(yy))}
         else:
             if np.std(a) == 0 or np.std(yy) == 0:
                 continue
@@ -47,8 +64,31 @@ def label_relations(act: np.ndarray, labels: dict[str, np.ndarray], kinds: dict[
 
 
 def relation_strength(rel: dict) -> float:
-    """One number per label relation, 0 = none, 1 = perfect: |2 AUROC - 1| or |r|."""
-    return abs(2.0 * rel["auroc"] - 1.0) if "auroc" in rel else abs(rel["r"])
+    """One number per label relation, 0 = none, 1 = perfect: |r| for a number; for a yes / no label the larger of
+    |2 AUROC - 1| and the average precision above the base rate, (AP - base) / (1 - base).
+
+    Why precision: a sparse feature (off on most moments) can only rank the moments where it fires, so its AUROC
+    stays near 0.5 + its firing rate even when it detects its label well - one that fires on 3% of moments at 17
+    times the label's base rate reads AUROC 0.6. Its precision shows what it does."""
+    if "auroc" not in rel:
+        return abs(rel["r"])
+    s = abs(2.0 * rel["auroc"] - 1.0)
+    ap, base = rel.get("ap"), rel.get("base")
+    if ap is not None and base is not None and np.isfinite(ap) and 0 < base < 1:
+        s = max(s, (ap - base) / (1.0 - base))
+    return float(s)
+
+
+def detects(rel: dict, min_auroc: float = 0.8, min_lift: float = 3.0, min_ap: float = 0.1,
+            min_ap_lift: float = 4.0) -> bool:
+    """Does a feature detect a yes / no label clearly? Its average precision is at least max(min_ap, min_ap_lift x
+    the base rate) - what decides for a sparse feature - or its AUROC is at least min_auroc with a lift of min_lift."""
+    if "auroc" not in rel:
+        return False
+    ap, base = rel.get("ap", float("nan")), rel.get("base", float("nan"))
+    precise = bool(np.isfinite(ap) and np.isfinite(base) and ap >= max(min_ap, min_ap_lift * base))
+    clean = bool(rel["auroc"] >= min_auroc and rel.get("lift", 0.0) >= min_lift)
+    return precise or clean
 
 
 def guess_name(rel: dict[str, dict], top: int = 3, min_coverage: float = 0.3) -> list[tuple[str, float, str]]:
@@ -172,7 +212,7 @@ def sparse_relations(rows_nz: np.ndarray, vals_nz: np.ndarray, labels: dict[str,
             p_on = nz1 / len(yy) if len(yy) else float("nan")
             out[k] = {"auroc": float(u / (n1 * n0)), "base": base, "p_given_on": float(p_on),
                       "lift": float(p_on / base) if len(yy) else float("nan"), "recall": nz1 / n1,
-                      "coverage": nv / max(n, 1)}
+                      "coverage": nv / max(n, 1), "ap": sparse_ap(vv, pos, n1, nv)}
         else:
             yv = y[valid].astype(np.float64)
             my, sy = yv.mean(), yv.std()

@@ -3,8 +3,9 @@
 A sparse autoencoder hands you features as numbers - feature 12, feature 40. Naming them is a short loop:
 
 1. **Suggest**: ``suggest(feature_set)`` proposes a name for each feature from the game-state label it lines up with
-   best (AUROC for yes / no labels, correlation for numbers), with warnings when something looks off - like a
-   feature that fires mostly at kickoffs.
+   best (precision and AUROC for yes / no labels, correlation for numbers), with warnings when something looks off -
+   like a feature that fires mostly at kickoffs. ``suggest_by_label`` goes the other way: for each label, the feature
+   that detects it best (one name per feature) - the quick way to name a new network's features.
 2. **Look**: ``study.feature_gallery(layer, "features.html")`` draws each feature's strongest moments from above.
 3. **Write it down**: ``write_names("names.toml", suggestions, layer)`` starts a names file; you edit it - confirm a
    name, write a better one, or reject it.
@@ -124,7 +125,7 @@ def suggest(fs: Any, features: Any = None, labels: dict[str, np.ndarray] | None 
             r = rel[label]
             name = _name_for(label, sign, r)
             if "auroc" in r and sign == "+":
-                detail = f"AUROC {r['auroc']:.2f}, {r.get('lift', float('nan')):.1f}x as likely when it fires"
+                detail = _detail(r)
             elif "auroc" in r:                          # it fires when the fact is NOT true: say it that way round
                 base, p_on = r.get("base", float("nan")), r.get("p_given_on", float("nan"))
                 lift_not = (1 - p_on) / (1 - base) if base < 1 else float("nan")
@@ -157,6 +158,54 @@ def suggest(fs: Any, features: Any = None, labels: dict[str, np.ndarray] | None 
         seen[sg.name] = seen.get(sg.name, 0) + 1
         if seen[sg.name] > 1:
             sg.name = f"{sg.name} #{seen[sg.name]}"
+    return out
+
+
+def _detail(r: dict[str, float]) -> str:
+    """What a yes / no relation is based on, in words."""
+    d = f"AUROC {r['auroc']:.2f}, {r.get('lift', float('nan')):.1f}x as likely when it fires"
+    if r.get("ap") is not None and np.isfinite(r["ap"]):
+        d += f", precision {r['ap']:.2f} (base rate {r.get('base', float('nan')):.1%})"
+    return d
+
+
+def suggest_by_label(fs: Any, labels: list[str] | None = None, min_ap: float = 0.1, min_ap_lift: float = 4.0,
+                     min_auroc: float = 0.85, min_lift: float = 3.0, report: list | None = None) -> list[Suggestion]:
+    """Name a dictionary by the labels: for each yes / no label (``labels``, in that order; default every one the
+    features relate to), the feature that detects it best - the best precision - kept only when it detects it
+    clearly: precision at least max(min_ap, min_ap_lift x the base rate), or AUROC at least min_auroc with a lift of
+    min_lift. A feature takes one name. The quick way to name a new network's features; check them as you would any
+    suggestion. ``report`` (a list): gets one entry per label, kept or not, with its numbers."""
+    from .analysis import detects, relation_strength
+    code = getattr(fs, "fingerprint", None)
+    by_label: dict[str, list[tuple[float, int, dict]]] = {}
+    for j, rel in fs.relations.items():
+        for k, r in rel.items():
+            if "auroc" in r and r.get("coverage", 1.0) >= 0.3:
+                ap = r.get("ap", float("nan"))
+                by_label.setdefault(k, []).append((ap if np.isfinite(ap) else -1.0, int(j), r))
+    order = labels if labels is not None else sorted(
+        by_label, key=lambda k: -max(relation_strength(r) for _, _, r in by_label[k]))
+    taken: set[int] = set()
+    out = []
+    for k in order:
+        cands = sorted(by_label.get(k, []), key=lambda t: -t[0])
+        pick = next(((ap, j, r) for ap, j, r in cands if j not in taken), None)
+        if pick is None:
+            if report is not None:
+                report.append({"label": k, "kept": False, "why": "no feature fires with it"})
+            continue
+        ap, j, r = pick
+        ok = detects(r, min_auroc, min_lift, min_ap, min_ap_lift)
+        if report is not None:
+            report.append({"label": k, "feature": j, "auroc": round(float(r["auroc"]), 3), "ap": round(float(ap), 3),
+                           "base": round(float(r.get("base", float("nan"))), 4), "kept": ok})
+        if not ok:
+            continue
+        taken.add(j)
+        sizes = fs.sizes(j) if getattr(fs, "codes", None) is not None and hasattr(fs, "sizes") else None
+        out.append(Suggestion(j, _name_for(k, "+", r), k, relation_strength(r), _detail(r), float(fs.freq[j]), [],
+                              sizes, code))
     return out
 
 
