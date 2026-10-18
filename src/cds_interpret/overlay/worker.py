@@ -146,7 +146,7 @@ def _action_of(th: Thoughts, out_row: Any) -> int | None:
     if out_row is None:
         return None
     o = np.asarray(out_row, np.float64).reshape(-1)
-    return int(o.argmax()) if len(o) else None
+    return int(np.argmax(o)) if len(o) else None
 
 
 def compute(th: Thoughts, msg: dict[str, Any], critic: Callable[[np.ndarray], Any] | None = None,
