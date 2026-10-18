@@ -3,7 +3,7 @@
 All notable changes to cds-interpret are written down here. The project follows
 [Semantic Versioning](https://semver.org); before 1.0, minor versions may change the API (each change is listed).
 
-## [0.3.0] - unreleased
+## [0.3.0] - 2026-10-18
 
 Hooks for bots whose world is bigger than the generic game state, so the overlay and the watch script serve them
 exactly - found moving a large self-play bot's own overlay onto the toolkit.
