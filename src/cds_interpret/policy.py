@@ -121,12 +121,17 @@ class Policy:
             [N] bool``, True where moment i is seen mirrored by car slot me[i]. Its network then can't tell the two
             sides apart, so the toolkit fits place readouts (the landing ring) in the bot's own frame and turns them
             back with this, and flips steer, yaw and roll when it says a move in words. See docs/howto/probes.md.
+        codec: for "looking at" on a bot whose input can't be rebuilt from the game state alone - an object that
+            splits the network's input by entity and builds it back: ``decompose(x) -> parts`` (a dict of arrays or
+            tensors, one row per input; set-valued parts carry ``"<key>:role"`` arrays, 1 team-mate, 2 opponent),
+            ``compose(parts) -> x`` and ``groups(parts) -> {name: attribution.Group}`` (named "own car", "ball",
+            "opponents", "team-mates"). See docs/howto/why-and-looking.md.
     """
 
     def __init__(self, net: torch.nn.Module, obs: ObsFn | None = None, forward: Callable[[torch.Tensor], Any] | None = None,
                  output: str = "logits", actions: Any = None, value: Callable[[torch.Tensor], Any] | None = None,
                  name: str = "policy", device: str | torch.device = "cpu",
-                 mirror: Callable[[Frames, np.ndarray], Any] | None = None):
+                 mirror: Callable[[Frames, np.ndarray], Any] | None = None, codec: Any = None):
         if not isinstance(net, torch.nn.Module):
             raise TypeError(f"Policy needs a torch.nn.Module, got {type(net).__name__}")
         if isinstance(net, torch.jit.ScriptModule):
@@ -149,6 +154,7 @@ class Policy:
         self.name = name
         self.device = torch.device(device)
         self.mirror_fn = mirror
+        self.codec = codec
 
     def __repr__(self) -> str:
         n = sum(p.numel() for p in self.net.parameters())
@@ -312,13 +318,14 @@ class Policy:
         name = f"{self.name} (random weights)"
         forward = self._forward
         if forward is None:
-            return Policy(net, self.obs_fn, None, self.output, self.actions, None, name, self.device, self.mirror_fn)
+            return Policy(net, self.obs_fn, None, self.output, self.actions, None, name, self.device, self.mirror_fn,
+                          self.codec)
         owner = getattr(forward, "__self__", None)
         if isinstance(owner, torch.nn.Module):
             for m_old, m_new in zip(self.net.modules(), net.modules()):
                 if m_old is owner:
                     return Policy(net, self.obs_fn, getattr(m_new, forward.__name__), self.output, self.actions, None,
-                                  name, self.device, self.mirror_fn)
+                                  name, self.device, self.mirror_fn, self.codec)
         return _SwappedWeights(self, {k: v.detach().clone() for k, v in net.state_dict().items()}, name)
 
 
@@ -328,7 +335,7 @@ class _SwappedWeights(Policy):
 
     def __init__(self, base: Policy, state: dict[str, torch.Tensor], name: str):
         super().__init__(base.net, base.obs_fn, base._forward, base.output, base.actions, None, name, base.device,
-                         base.mirror_fn)
+                         base.mirror_fn, base.codec)
         self._state = state
 
     @contextmanager

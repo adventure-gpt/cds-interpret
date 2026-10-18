@@ -4,6 +4,7 @@
 make_pack / save_pack / load_pack  what to show from one layer: named SAE features, probes, the action table
 add_land                           a landing marker read from its own (often earlier) layer
 add_decoders / add_donors          what "why this move" and "looking at" need (decoder directions, real moments)
+add_input_donors                   ... recorded network inputs, for a policy that splits its own input (codec)
 Thoughts                           reads a pack from a layer's values (pure numpy)
 with_thoughts(BotClass, pack)      your RLBot v5 bot class with the overlay (needs ``cds-interpret[rlbot]``)
 PanelConfig / Panel                how the panel looks: rows, names, colours, markers, team modes (a TOML file)
@@ -19,7 +20,7 @@ docs/howto/overlay.md.
 
 from .bot import with_thoughts
 from .explain import Explainer, load_policy, try_readings
-from .pack import Thoughts, add_decoders, add_donors, add_land, load_pack, make_pack, save_pack
+from .pack import Thoughts, add_decoders, add_donors, add_input_donors, add_land, load_pack, make_pack, save_pack
 from .panel import (
     FeatureStyle,
     Markers,
@@ -48,6 +49,7 @@ __all__ = [
     "WorkerLink",
     "add_decoders",
     "add_donors",
+    "add_input_donors",
     "add_land",
     "check_panel",
     "compute",

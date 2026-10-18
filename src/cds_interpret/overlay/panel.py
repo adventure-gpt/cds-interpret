@@ -398,7 +398,7 @@ def check_panel(config: PanelConfig | str | os.PathLike[str] | None, pack: Any) 
                 out.append(f"{at} needs the features' decoder directions, which this pack doesn't have, so the row "
                            "stays hidden. Add them with overlay.add_decoders(pack, sae), the dictionary the features "
                            "came from (packs made with make_pack have them).")
-        if r.kind == "looking" and custom_rows and not pk.get("donors"):
+        if r.kind == "looking" and custom_rows and not pk.get("donors") and not pk.get("input_donors"):
             out.append(f"{at} needs recorded moments in the pack to compare with, which it doesn't have, so the row "
                        "stays hidden. Add them with overlay.add_donors(pack, moments) (Study.make_pack adds them).")
     for n in cfg.features:

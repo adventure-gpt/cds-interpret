@@ -61,7 +61,8 @@ def match_cars(packet: Any, cars: Any) -> list[int]:
 
 def watch_thoughts(policy: Any, pack: str | os.PathLike[str], cars: Any, panel: Any = None,
                    hooks: dict[str, Callable] | None = None, title: str | None = None,
-                   team_sizes: list[int] | None = None, error_log: str | os.PathLike[str] | None = None) -> type:
+                   team_sizes: list[int] | None = None, error_log: str | os.PathLike[str] | None = None,
+                   observe: Any = None) -> type:
     """An RLBot v5 Script class that draws a bot's thoughts without being that bot (see the module's notes).
 
     Args:
@@ -75,6 +76,13 @@ def watch_thoughts(policy: Any, pack: str | os.PathLike[str], cars: Any, panel: 
         team_sizes: draw only when the watched car's team has this many players (e.g. [2, 3] for a pack made for
             a bot's 2v2 / 3v3 brain); default: always.
         error_log: a file the script also writes its errors to.
+        observe: for a bot whose input needs more of the game than the policy's obs function gets from game state
+            (boost pads, timers it keeps between packets, ...): a function, or ``"package.module:factory"`` (with its
+            keyword arguments as a pair) building one when the script starts - ``observe(packet, cars, field_info)``
+            returns the bot's inputs for those cars [n, ...], or a dict with "obs" and optionally "mirrored" [n]
+            (which cars see the field mirrored), "mask" [n, A] (the actions each may take: the move is chosen among
+            them) and "state" (more fields for the game state a critic or codec gets). It may keep what it needs
+            between packets; it is called on draw frames only.
     """
     Script: Any = require("rlbot.managers", "watching a bot in RLBot").Script
 
@@ -127,6 +135,8 @@ def watch_thoughts(policy: Any, pack: str | os.PathLike[str], cars: Any, panel: 
                 taps["land_h"] = th.land_module
             self._cds_taps = [LayerTap(pol.net, {k: v}, keep="all").attach() for k, v in taps.items()]
             self._cds_critic = pol.value if pol.value_fn is not None else None
+            from .._specs import build, is_spec
+            self._cds_observe = build(observe, "observe") if observe is not None and is_spec(observe) else observe
             self._cds_st: dict[str, Any] = {
                 "drawn": -10 ** 9, "follow": Follow(conf.follow), "seeded": False, "think": {}, "draw": {},
                 "readings": 0, "cleared": True, "panel_car": None,
@@ -180,8 +190,16 @@ def watch_thoughts(policy: Any, pack: str | os.PathLike[str], cars: Any, panel: 
             # the bot's input for each of its cars, rebuilt from the packet, and its network on it
             row = packet_row(packet)
             n = len(watched)
-            fr = Frames({k: np.repeat(np.asarray(v)[None], n, 0) for k, v in row.items()})
-            x = pol.observe(fr, np.array(watched))
+            seen: dict[str, Any] = {}
+            if self._cds_observe is not None:
+                got_obs = self._cds_observe(packet, watched, getattr(self, "field_info", None))
+                seen = dict(got_obs) if isinstance(got_obs, dict) else {"obs": got_obs}
+                x = torch.as_tensor(np.asarray(seen["obs"].detach().cpu() if torch.is_tensor(seen["obs"])
+                                               else seen["obs"], np.float32))
+                row.update({kk: np.asarray(v) for kk, v in (seen.get("state") or {}).items()})
+            else:
+                fr = Frames({k: np.repeat(np.asarray(v)[None], n, 0) for k, v in row.items()})
+                x = pol.observe(fr, np.array(watched))
             for t in self._cds_taps:
                 t.clear()
             with torch.no_grad():
@@ -196,6 +214,10 @@ def watch_thoughts(policy: Any, pack: str | os.PathLike[str], cars: Any, panel: 
                                    "output": got.get("y", out.detach().float().cpu().numpy().reshape(n, -1)),
                                    "obs": x.numpy(), "land_h": got.get("land_h"), "panel": k, "cars": watched,
                                    "state": row, "why": wants["why"], "me": panel_car, "donors": wants["donors"]}
+            for key in ("mirrored", "mask"):                # (from the observe hook: its own flags and masks)
+                if seen.get(key) is not None:
+                    v = seen[key]
+                    msg[key] = np.asarray(v.detach().cpu() if torch.is_tensor(v) else v)
             msg["looking"] = bool(k is not None and wants["looking"] and st["readings"] % max(1, wants["every"]) == 0)
             st["readings"] += 1
             res = compute(th, msg, self._cds_critic, self._cds_ex)

@@ -25,7 +25,8 @@ What it holds:
 - **decoders** (made by default, or :func:`add_decoders`): each named feature's decoder direction, for the
   "why this move" row - how hard each feature pushes the move the policy leans to;
 - **donors** (optional, :func:`add_donors`): a few dozen real recorded moments, for the "looking at" row - what the
-  move rests on: the bot's own car, the ball, the opponents, the team-mates.
+  move rests on: the bot's own car, the ball, the opponents, the team-mates; or, for a bot whose policy splits its own
+  input (``Policy(codec=...)``), recorded network inputs (:func:`add_input_donors`).
 
 Packs are saved as a plain ``.npz`` file (arrays and JSON text, no pickled code): safe to load from anyone.
 """
@@ -223,11 +224,30 @@ def add_donors(pack: dict[str, Any], moments: Any, me: Any = None, n: int = 32, 
     return pack
 
 
+def add_input_donors(pack: dict[str, Any], inputs: dict[int, Any], n: int = 32, seed: int = 0) -> dict[str, Any]:
+    """Recorded network INPUTS for the "looking at" row of a bot whose policy splits its own input by entity
+    (``Policy(codec=...)``: decompose / compose / groups) - for a bot whose input can't be rebuilt from the game state
+    alone. inputs: {number of cars in the match (2, 4, 6): [N, ...] inputs the bot really saw}; up to ``n`` kept for each,
+    replacing what the pack had for that number of cars."""
+    groups = [g for g in pack.get("input_donors") or [] if int(g["cars"]) not in {int(c) for c in inputs}]
+    rng = np.random.default_rng(seed)
+    for cars, x in inputs.items():
+        x = np.asarray(x.detach().cpu().numpy() if hasattr(x, "detach") else x, np.float32)
+        if not len(x):
+            raise CDSInterpretError(f"add_input_donors: no inputs for {cars} cars")
+        pick = np.sort(rng.choice(len(x), size=min(int(n), len(x)), replace=False))
+        groups.append({"cars": int(cars), "x": x[pick]})
+    pack["input_donors"] = sorted(groups, key=lambda g: int(g["cars"]))
+    pack["version"] = VERSION
+    return pack
+
+
 # ---------------------------------------------------------------------------------------------------- files
 def save_pack(pack: dict[str, Any], path: str | os.PathLike[str]) -> str:
     """Write a pack as one .npz file (arrays and JSON text only)."""
     arrays: dict[str, np.ndarray] = {}
-    meta = {k: v for k, v in pack.items() if k not in ("features", "probes", "table", "outlook", "land", "donors")}
+    meta = {k: v for k, v in pack.items() if k not in ("features", "probes", "table", "outlook", "land", "donors",
+                                                        "input_donors")}
     meta["features"] = [{k: v for k, v in f.items() if k not in ("w", "d")} for f in pack["features"]]
     meta["probes"] = [{k: v for k, v in p.items() if k != "w"} for p in pack["probes"]]
     for i, f in enumerate(pack["features"]):
@@ -253,6 +273,11 @@ def save_pack(pack: dict[str, Any], path: str | os.PathLike[str]) -> str:
             for k, v in grp["data"].items():
                 arrays[f"donors{g}_{k}"] = np.asarray(v, np.float32)
             meta["donors"].append({"cars": int(grp["cars"]), "n": int(len(grp["me"])), "fields": sorted(grp["data"])})
+    if pack.get("input_donors"):
+        meta["input_donors"] = []
+        for g, grp in enumerate(pack["input_donors"]):
+            arrays[f"idonors{g}"] = np.asarray(grp["x"], np.float32)
+            meta["input_donors"].append({"cars": int(grp["cars"]), "n": int(len(grp["x"]))})
     arrays["meta_json"] = np.frombuffer(json.dumps(meta).encode("utf-8"), dtype=np.uint8)
     path = os.fspath(path)
     if not path.endswith(".npz"):
@@ -267,7 +292,8 @@ def load_pack(path: str | os.PathLike[str]) -> dict[str, Any]:
         meta = json.loads(bytes(z["meta_json"]).decode("utf-8"))
         if meta.get("format") != FORMAT:
             raise CDSInterpretError(f"{path} is not a cds-interpret thoughts pack")
-        pack = {k: v for k, v in meta.items() if k not in ("features", "probes", "outlook_b", "land", "donors")}
+        pack = {k: v for k, v in meta.items() if k not in ("features", "probes", "outlook_b", "land", "donors",
+                                                           "input_donors")}
         pack["features"] = [{**f, "w": z[f"feature_{i}"], **({"d": z[f"decoder_{i}"]} if f"decoder_{i}" in z else {})}
                             for i, f in enumerate(meta["features"])]
         pack["probes"] = [{**p, "w": z[f"probe_{i}"]} for i, p in enumerate(meta["probes"])]
@@ -279,6 +305,8 @@ def load_pack(path: str | os.PathLike[str]) -> dict[str, Any]:
         pack["donors"] = [{"cars": int(g["cars"]), "me": z[f"donors{i}_me"],
                            "data": {k: z[f"donors{i}_{k}"] for k in g["fields"]}}
                           for i, g in enumerate(meta.get("donors") or [])]
+        pack["input_donors"] = [{"cars": int(g["cars"]), "x": z[f"idonors{i}"]}
+                                for i, g in enumerate(meta.get("input_donors") or [])]
     return pack
 
 
@@ -311,6 +339,9 @@ class Thoughts:
             data = {k: np.asarray(v) for k, v in g["data"].items()}
             if all(k in data for k in REQUIRED) and len(g["me"]):
                 self.donors.append((Frames(data), np.asarray(g["me"], np.int64)))
+        # ... or recorded network inputs, for a policy with its own input codec: [(cars, inputs [n, ...])]
+        self.input_donors: list[tuple[int, np.ndarray]] = [(int(g["cars"]), np.asarray(g["x"], np.float32))
+                                                          for g in pack.get("input_donors") or []]
 
     @property
     def layer(self) -> str:
@@ -322,8 +353,8 @@ class Thoughts:
         return [str(f["name"]) for f in self.pack["features"]]
 
     def donor_cars(self) -> list[int]:
-        """The numbers of cars the pack has donor moments for (2 in 1v1, 4 in 2v2, 6 in 3v3)."""
-        return [fr.n_cars for fr, _ in self.donors]
+        """The numbers of cars the pack has donor moments (or recorded inputs) for (2 in 1v1, 4 in 2v2, 6 in 3v3)."""
+        return sorted({fr.n_cars for fr, _ in self.donors} | {c for c, _ in self.input_donors})
 
     def land_xy(self, h: Any) -> list[float] | None:
         """The landing marker (x, y; the team's frame) from its layer's values, or None without one."""

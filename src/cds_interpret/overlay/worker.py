@@ -14,7 +14,6 @@ what the panel shows, so none of it runs in the bot's own process or thread pool
 from __future__ import annotations
 
 import contextlib
-import importlib
 import multiprocessing as mp
 import os
 import queue
@@ -130,15 +129,32 @@ def below_normal() -> None:
         pass
 
 
-def load_critic(spec: str | None) -> Callable[[np.ndarray], Any] | None:
-    """A critic from ``"package.module:factory"``: ``factory()`` returns a function obs [n, D] -> values [n]. It is
-    imported and built in the worker process, never in the bot's."""
+def load_critic(spec: Any) -> Callable[..., Any] | None:
+    """A critic from ``"package.module:factory"`` or ``("package.module:factory", {keyword arguments})``:
+    ``factory(**kwargs)`` returns a function obs [n, D] -> values [n] - or, when it takes ``state`` (and ``cars``),
+    ``critic(obs, state=..., cars=...)``: the game as one packet's Frames fields plus whatever ``with_thoughts(...,
+    extras=...)`` added, and the rows' player indices. Built in the worker process, never in the bot's."""
     if not spec:
         return None
-    mod, _, attr = spec.partition(":")
-    if not attr:
-        raise ValueError(f"a critic is given as 'module:factory', not {spec!r}")
-    return getattr(importlib.import_module(mod), attr)()
+    from .._specs import build
+    return build(spec, "critic")
+
+
+def _takes_state(fn: Callable[..., Any]) -> bool:
+    """Does a critic want the game state too (a parameter named ``state``)?"""
+    import inspect
+    try:
+        return "state" in inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+def _masked(out: Any, mask: Any, kind: str) -> np.ndarray:
+    """One car's output with the actions its mask rules out made impossible (probabilities 0, logits very low)."""
+    o = np.asarray(out, np.float64).reshape(-1).copy()
+    m = np.asarray(mask, bool).reshape(-1)
+    o[~m] = 0.0 if kind == "probs" else -1e30
+    return o
 
 
 def _action_of(th: Thoughts, out_row: Any) -> int | None:
@@ -149,12 +165,14 @@ def _action_of(th: Thoughts, out_row: Any) -> int | None:
     return int(np.argmax(o)) if len(o) else None
 
 
-def compute(th: Thoughts, msg: dict[str, Any], critic: Callable[[np.ndarray], Any] | None = None,
+def compute(th: Thoughts, msg: dict[str, Any], critic: Callable[..., Any] | None = None,
             explainer: Explainer | None = None) -> dict[str, Any]:
     """One request -> one result per car. msg: "layer" [n, d] (the pack's layer), "output" [n, A] (the action
     output), optional "obs" [n, ...] (the network's input: for a critic and "why this move"), "land_h" [n, d'] (the
     landing layer when it is another one), "frame", "cars" (the rows' player indices) and "state" (the game as Frames
-    fields of one packet: for a bot that sees the field mirrored, and for "looking at"). For the panel's car (row "panel"): "why" (True: its "why this
+    fields of one packet: for a bot that sees the field mirrored, and for "looking at"); optional "mask" [n, A] (the
+    actions each car may take: the move is chosen among them) and "mirrored" [n] (which cars see the moment mirrored,
+    when the observation says so itself). For the panel's car (row "panel"): "why" (True: its "why this
     move"), "looking" (True: its "looking at", from "state" - the game as Frames fields of one packet - seen by car
     slot "me", averaged over "donors" donor moments). Returns {"frame", "cars": [...], "notes": [...]}."""
     layer = np.asarray(msg["layer"], np.float32)
@@ -163,7 +181,10 @@ def compute(th: Thoughts, msg: dict[str, Any], critic: Callable[[np.ndarray], An
     obs = msg.get("obs")
     value: list[float | None] = [None] * n
     if critic is not None and obs is not None:
-        v = critic(np.asarray(obs, np.float32))
+        if _takes_state(critic):
+            v = critic(np.asarray(obs, np.float32), state=msg.get("state"), cars=msg.get("cars"))
+        else:
+            v = critic(np.asarray(obs, np.float32))
         v = v.detach().cpu().numpy() if hasattr(v, "detach") else np.asarray(v)
         value = [float(x) for x in np.asarray(v, np.float64).reshape(-1)[:n]]
     land_h = msg.get("land_h")
@@ -174,6 +195,9 @@ def compute(th: Thoughts, msg: dict[str, Any], critic: Callable[[np.ndarray], An
     notes: list[str] = []
     # a bot that sees the field mirrored at some moments: which cars see this one mirrored (its policy says)
     flags = explainer.mirrored(msg.get("state"), msg.get("cars")) if explainer is not None else None
+    if msg.get("mirrored") is not None:                # (the observation said it itself)
+        flags = np.asarray(msg["mirrored"], bool).reshape(-1)
+    mask = msg.get("mask")
     if th.land_frame == "mirrored" and flags is None and not getattr(th, "_noted_mirror", False):
         th._noted_mirror = True  # type: ignore[attr-defined]
         notes.append("the landing readout was fitted in the bot's own mirrored frame, so the overlay needs the bot's "
@@ -182,6 +206,8 @@ def compute(th: Thoughts, msg: dict[str, Any], critic: Callable[[np.ndarray], An
     cars = []
     for k in range(n):
         out_k = None if out_rows is None else out_rows[k]
+        if out_k is not None and mask is not None:      # (the move is chosen among the actions the car may take)
+            out_k = _masked(out_k, mask[k], th.output)
         r = th.read(layer[k], out_k)
         if value[k] is not None:
             r["value"] = value[k]
@@ -201,13 +227,14 @@ def compute(th: Thoughts, msg: dict[str, Any], critic: Callable[[np.ndarray], An
                 r["why"] = explainer.why(None if obs is None else np.asarray(obs)[k], layer[k], a, acts)
             if msg.get("looking") and a is not None:
                 r["looking"] = explainer.looking(msg.get("state"), int(msg.get("me", 0)), a,
-                                                 int(msg.get("donors", 3)))
+                                                 int(msg.get("donors", 3)),
+                                                 x=None if obs is None else np.asarray(obs)[k])
         cars.append(r)
     notes += explainer.notes[notes_before:] if explainer is not None else []
     return {"frame": msg.get("frame"), "cars": cars, "notes": notes}
 
 
-def serve(conn: Any, pack_path: str, critic_spec: str | None = None, policy_spec: str | None = None) -> None:
+def serve(conn: Any, pack_path: str, critic_spec: Any = None, policy_spec: Any = None) -> None:
     """The worker process: below-normal priority, one torch thread if torch is used, answering each request with
     compute(); None ends it. ``policy_spec`` ("module:factory"): the bot's Policy, built here, for "why this move"
     and "looking at" (and the outlook, from its critic, when there is no ``critic_spec``). The ready message says

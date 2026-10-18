@@ -94,9 +94,10 @@ def _fresh(store: dict[int, dict[str, Any]], car: int, frame: int) -> dict[str, 
 
 def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | Callable[[Any], torch.nn.Module] | None = None,
                   panel: str | os.PathLike[str] | PanelConfig | None = None, hooks: dict[str, Callable] | None = None,
-                  input_layer: str = "", critic: str | None = None, worker: bool = True, title: str | None = None,
+                  input_layer: str = "", critic: Any = None, worker: bool = True, title: str | None = None,
                   draw_every: int | None = None, x: float | None = None, y: float | None = None,
-                  policy: Any = None, error_log: str | os.PathLike[str] | None = None) -> type:
+                  policy: Any = None, error_log: str | os.PathLike[str] | None = None,
+                  extras: Callable[[Any, Any], dict[str, Any]] | None = None) -> type:
     """Your RLBot v5 bot class (a ``rlbot.managers.Bot`` or ``Hivemind`` subclass) with the thoughts overlay.
 
     Args:
@@ -108,21 +109,33 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
         hooks: functions your panel config names in ``hook = "..."`` (custom rows, your own markers).
         input_layer: the module whose INPUT is your observation ("" = the network itself); read for a critic and for
             "why this move".
-        critic: ``"package.module:factory"`` - factory() returns obs [n, D] -> values [n], built in the worker
-            process - for the outlook bar (without one the policy's critic or the pack's outlook probe is used).
+        critic: ``"package.module:factory"`` (or ``("package.module:factory", {keyword arguments})``) -
+            factory(**kwargs) returns obs [n, D] -> values [n], built in the worker process - for the outlook bar
+            (without one the policy's critic or the pack's outlook probe is used). A critic that takes ``state`` (and
+            ``cars``) gets the game too: one packet's Frames fields and whatever ``extras`` adds.
         worker: compute in a separate process (True, the safe default) or in the bot's process after the controls
             are sent (False: for debugging).
         title, draw_every, x, y: shortcuts that override the panel config's title, frames between draws and
             top-left corner.
-        policy: ``"package.module:factory"`` - factory() returns a ``cds_interpret.Policy`` of the same network
-            (with its obs function), built in the worker process - for the "why this move" and "looking at" rows
-            (docs/howto/why-and-looking.md). With ``worker=False`` it may also be a Policy.
+        policy: ``"package.module:factory"`` (or with its keyword arguments, as ``critic``) - it returns a
+            ``cds_interpret.Policy`` of the same network (with its obs function or input codec), built in the worker
+            process - for the "why this move" and "looking at" rows (docs/howto/why-and-looking.md). With
+            ``worker=False`` it may also be a Policy.
         error_log: a file the overlay also writes its errors to (with tracebacks), besides your bot's log.
+        extras: ``extras(bot, packet) -> {name: array}``, run in your bot's process after each decision's controls
+            are sent: more of the game, as your bot sees it, for the worker - added to the game state a critic with
+            ``state`` and the policy's obs function receive (e.g. your bot's own state arrays). Keep it small and
+            quick; names must not start with ``car_`` unless the array has a row per car.
     """
     pack_path = os.fspath(pack)
-    if worker and policy is not None and not isinstance(policy, str):
-        raise CDSInterpretError("with_thoughts: give policy as \"package.module:factory\" - the overlay's worker builds "
-                                "its own copy of your network from it (a Policy object works only with worker=False)")
+    from .._specs import is_spec
+    if worker and policy is not None and not is_spec(policy):
+        raise CDSInterpretError("with_thoughts: give policy as \"package.module:factory\" (or with its keyword "
+                                "arguments: (\"package.module:factory\", {...})) - the overlay's worker builds its own "
+                                "copy of your network from it (a Policy object works only with worker=False)")
+    if critic is not None and not is_spec(critic):
+        raise CDSInterpretError("with_thoughts: give critic as \"package.module:factory\" (or with its keyword "
+                                "arguments), built in the overlay's worker")
 
     def init(bot: Any) -> None:
         pk = load_pack(pack_path)
@@ -270,8 +283,10 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
             k = cars.index(panel_car) if panel_car in cars else None
             msg: dict[str, Any] = {"frame": frame, "layer": got["h"], "output": got.get("y"), "obs": got.get("x"),
                                    "land_h": got.get("land_h"), "panel": k, "cars": list(cars)}
-            if policy is not None:                      # (the game state: for "looking at" and a mirroring bot)
+            if policy is not None or extras is not None:   # (the game: for "looking at", a mirroring bot, a critic)
                 msg["state"] = packet_row(packet)
+                if extras is not None:
+                    msg["state"].update({kk: np.asarray(v) for kk, v in extras(bot, packet).items()})
             if k is not None:
                 msg["why"] = wants["why"]
                 due = wants["looking"] and st["sent"] % max(1, int(wants["every"])) == 0
