@@ -3,7 +3,7 @@
 All notable changes to cds-interpret are written down here. The project follows
 [Semantic Versioning](https://semver.org); before 1.0, minor versions may change the API (each change is listed).
 
-## [0.2.0] - unreleased
+## [0.2.0] - 2026-10-17
 
 The live overlay in 2v2 and 3v3, two new rows that say why the bot makes each move, a panel that keeps going through
 bad frames, thoughts for bots you can't modify, and packs carried over to newer checkpoints.
