@@ -3,6 +3,14 @@
 All notable changes to cds-interpret are written down here. The project follows
 [Semantic Versioning](https://semver.org); before 1.0, minor versions may change the API (each change is listed).
 
+## [0.3.1] - 2026-10-18
+
+### Fixed
+
+- **The compact panel** sat over the game's own event feed (the goal and assist banners in the top-right corner) and
+  its lighter background was hard to read over a bright crowd: it now starts below the feed, above the boost meter,
+  on a darker background. Found the first time it was used in a 3v3.
+
 ## [0.3.0] - 2026-10-18
 
 Hooks for bots whose world is bigger than the generic game state, so the overlay and the watch script serve them

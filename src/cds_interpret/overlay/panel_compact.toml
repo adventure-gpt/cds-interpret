@@ -1,6 +1,6 @@
 # The compact thoughts panel: the same readings in about half the room, for watching a game rather than studying it.
-# Top-right (clear of the spectator card bottom-left and the boost meter bottom-right), smaller text, a lighter
-# background, one line where the default keeps two, one feature where it lists three.
+# On the right, below the game's event feed (goal and assist banners, top-right) and above the boost meter, clear of
+# the spectator card (bottom-left); smaller text, one line where the default keeps two, one feature where it lists three.
 #
 #     with_thoughts(MyBot, pack="thoughts.npz", panel="compact")
 #
@@ -9,14 +9,14 @@
 
 [panel]
 x = 0.836
-y = 0.09
+y = 0.235
 width = 0.15
 text_scale = 0.8
 title_scale = 0.9
 subtitle = "car {car} of {cars}"
 
 [colors]
-background = [0, 0, 0, 110]
+background = [0, 0, 0, 160]
 
 [[rows]]
 kind = "outlook"

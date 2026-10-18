@@ -1,4 +1,4 @@
-"""The built-in panels: "default" is the example file's panel, "compact" a smaller one in the top-right corner; both
+"""The built-in panels: "default" is the example file's panel, "compact" a smaller one on the right, below the game's event feed; both
 load by name, a file of the same name wins, and `cds-interpret panel --compact` writes the compact one out."""
 from __future__ import annotations
 

@@ -12,8 +12,8 @@ library code to edit.
 ## A smaller panel, ready-made
 
 If the default panel takes too much of the screen while you just want to watch, use the compact one: the same
-readings in about half the room, in the top-right corner (clear of the spectator card and the boost meter), with smaller
-text and a lighter background.
+readings in about half the room, on the right below the game's event feed (clear of the spectator card and the boost
+meter), with smaller text.
 
 ```python
 with_thoughts(MyBot, pack="thoughts.npz", panel="compact")
