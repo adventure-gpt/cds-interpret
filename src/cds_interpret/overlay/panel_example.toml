@@ -13,11 +13,11 @@
                             # "" for no title
 x = 0.012                   # the panel's top-left corner
 y = 0.30
-# Both teams showing thoughts (the same bot on both teams, or two bots that each have an overlay): "auto" draws the
-# panel at x, y while it is the only one, and puts the two on their teams' sides when the other team's shows too -
-# blue on the left, orange on the right (x mirrored), each title and landing ring in its team's colour. "team":
-# always the teams' sides; "fixed": always at x, y.
-side = "auto"
+# More overlays in a match (the same bot on both teams, or two bots that each have an overlay): "one" - they share one
+# panel here, showing the car on camera (else the last of theirs on camera, else a random pick), as big as the biggest
+# of their panels, titles and rings in the teams' colours; "sides" - each its own panel on its team's side (blue
+# left, orange right: x mirrored); "none" - each as if alone.
+share = "one"
 width = 0.17                # about 30 characters of text
 text_scale = 1.0            # 1.2 for bigger text (the panel grows taller, not wider)
 title_scale = 1.2

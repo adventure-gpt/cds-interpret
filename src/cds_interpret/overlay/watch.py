@@ -150,7 +150,7 @@ def watch_thoughts(policy: Any, pack: str | os.PathLike[str], cars: Any, panel: 
             if not getattr(self, "_cds_on", False):
                 return
             st = self._cds_st
-            self._cds_share.beat(None, False)          # (this overlay is running; what it shows: _cds_draw)
+            self._cds_share.alive()                    # (this overlay is running; what it shows: _cds_draw)
             frame = int(packet.match_info.frame_num)
             if 0 <= frame - st["drawn"] < self._cds_panel.config.draw_every or not self.renderer.can_render:
                 return
@@ -180,14 +180,21 @@ def watch_thoughts(policy: Any, pack: str | os.PathLike[str], cars: Any, panel: 
             if team_sizes:
                 size = {t: sum(1 for p in players if int(p.team) == t) for t in (0, 1)}
                 watched = [i for i in watched if size[int(players[i].team)] in team_sizes]
+            share = self._cds_share
+            spec = spectated(packet)
+            share.beat(watched, [int(players[i].team) for i in watched], spec, box=st.get("box"))
             if not watched:
                 self._clear()
                 return
             if not st["seeded"]:
                 st["follow"].seed = match_seed(packet, watched)
                 st["seeded"] = True
-            spec = spectated(packet)
             panel_car, rule = st["follow"].pick(watched, spec)
+            conf = pnl.config
+            # (overlay.share) more overlays in the match: one panel, the camera's rules over all their cars
+            shared_out = conf.share == "one" and not share.owns_panel(watched, spec)
+            if shared_out:
+                panel_car, rule = None, "hide"
             if panel_car != st["panel_car"]:
                 st["panel_car"], st["readings"] = panel_car, 0
             # the bot's input for each of its cars, rebuilt from the packet, and its network on it
@@ -242,6 +249,17 @@ def watch_thoughts(policy: Any, pack: str | os.PathLike[str], cars: Any, panel: 
                 st["think"][c] = (pt, frame)
                 marks.append((c, pt))
             thc = result.get(panel_car) if panel_car is not None else None
+            from rlbot import flat
+            teams = sorted({int(players[i].team) for i in watched})
+            crowded = conf.share != "none" and share.crowded(teams)
+            if conf.share == "one" and frame - st.get("measured", -10 ** 9) >= 60:
+                res_m = thc if thc is not None else result.get(watched[0])
+                if res_m is not None:            # (its own panel's size, for the shared panel: as big as the biggest)
+                    st["box"] = pnl.measure(flat, res_m, "-" if len(watched) > 1 and conf.subtitle else None,
+                                            {"why": self._cds_ex.available["why"],
+                                             "looking": len(players) in self._cds_ex.available["looking"]},
+                                            teams[0] if len(teams) == 1 else None, crowded)
+                    st["measured"] = frame
             if thc is None and not marks:
                 self._clear()
                 return
@@ -252,16 +270,17 @@ def watch_thoughts(policy: Any, pack: str | os.PathLike[str], cars: Any, panel: 
             if thc is not None and len(mates) > 1 and pnl.config.subtitle:
                 sub = subtitle_text(pnl.config.subtitle, panel_car, mates, rule, str(getattr(players[panel_car],
                                                                                               "name", "")))
-            true = landing_point(getattr(self, "ball_prediction", None)) if markers.prediction else None
+            true = (landing_point(getattr(self, "ball_prediction", None)) if markers.prediction and not shared_out
+                    else None)
             av = self._cds_ex.available
-            from rlbot import flat
-            share = self._cds_share
-            share.beat(team, thc is not None)
+            box = share.shared_box(st["box"]) if conf.share == "one" and st.get("box") is not None else None
+            if team is None and len(teams) == 1:
+                team = teams[0]
             pnl.draw(self.renderer, flat, thc, car_index=panel_car, landing_true=true,
                      state=_fresh(st["draw"], panel_car, frame) if thc is not None else None, frame=frame,
                      value_scale=self._cds_scale, team=team, marks=marks, subtitle=sub,
                      available={"why": av["why"], "looking": len(players) in av["looking"]},
-                     crowded=share.crowded(team))
+                     crowded=crowded, box=box)
 
         def retire(self) -> None:
             for t in getattr(self, "_cds_taps", []):

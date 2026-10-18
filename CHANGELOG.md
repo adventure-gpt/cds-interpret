@@ -3,6 +3,17 @@
 All notable changes to cds-interpret are written down here. The project follows
 [Semantic Versioning](https://semver.org); before 1.0, minor versions may change the API (each change is listed).
 
+## [0.5.0] - 2026-10-18
+
+### Changed
+
+- **Both teams' thoughts share one panel** (`[panel] share = "one"`, the default; it replaces 0.4.0's `side`). Two
+  panels side by side were too much: now the overlays of a match share the one panel where the config puts it, and it
+  follows the camera rules over all their cars - the car on camera, else the last of theirs on camera, else one
+  picked at random. Only the overlay with that car draws it; each still draws its own cars' rings, in its team's
+  colour. The shared panel is as big as the biggest of theirs (the smallest box holding every one), so it keeps its
+  size as the camera moves between their cars. `"sides"` keeps 0.4.0's two panels; `"none"`: each as if alone.
+
 ## [0.4.0] - 2026-10-18
 
 ### Added

@@ -131,21 +131,30 @@ RLBot runs a bot in one of two ways, and the overlay handles both:
 ## Both teams showing their thoughts
 
 Two overlays can run in one match: the same bot on both teams, or two different bots that each show their
-thoughts (your bot's own `with_thoughts`, and a [watch script](watch-a-bot.md) over another bot, say). Each overlay
-draws its own panel and its own cars' rings; they never touch each other's drawings.
+thoughts (your bot's own `with_thoughts`, and a [watch script](watch-a-bot.md) over another bot, say). They share
+**one panel**, where your panel config puts it, and it follows the same rules as within a team - over all their cars:
 
-While only one shows a panel, it stays where your panel config puts it. As soon as the other team's shows one too,
-the two move to their teams' sides of the screen, the way the game's scoreboard has them: **blue on the left, orange
-on the right**, at mirror images of your configured spot. Each panel's title and its landing rings take the team's
-colour, so you can tell whose is whose even with the same bot on both sides. When one stops, the other goes back.
+- the car the camera is on, whichever overlay has it;
+- when the camera is on a car none of them has: the one of their cars that was on camera last;
+- before any of their cars has been on camera: one picked at random (every overlay picks the same).
 
-`[panel] side` chooses this: `"auto"` (the default: as above), `"team"` (always the teams' sides, even alone) or
-`"fixed"` (always where `x` and `y` say).
+Only the overlay with that car draws the panel; every overlay still draws its own cars' landing rings. While overlays
+of both teams run, each title and ring takes the team's colour, so you can tell whose thoughts are on screen even
+with the same bot on both sides.
 
-How they find each other: every overlay leaves a small note in a folder in your temp directory
-(`cds-interpret-overlays`; `$CDS_INTERPRET_OVERLAYS` to put it elsewhere) about once a second - which team's car its
-panel shows - and reads the others'. RLBot runs a match's bots and scripts on one machine, so they all see the same
-folder. A note that stops being rewritten (a bot that ended) is ignored after a few seconds.
+The panel keeps one size: when the overlays' panels differ (another bot's panel file, more rows, a wider panel, or
+placed a little elsewhere), the shared panel is the smallest box that holds every one of them, so only what is inside
+it changes as the camera moves between their cars. When one overlay stops, the other's panel goes back to its own.
+
+`[panel] share` chooses this: `"one"` (the default: as above), `"sides"` (each overlay its own panel, on its team's
+side of the screen - blue on the left, orange on the right, mirror images of your spot) or `"none"` (each as if it
+were alone).
+
+How they agree: every overlay leaves a small note in a folder in your temp directory (`cds-interpret-overlays`;
+`$CDS_INTERPRET_OVERLAYS` to put it elsewhere) twice a second and whenever its cars come on or off camera - its cars,
+their teams, when one was last on camera, its panel's size - and reads the others'. RLBot runs a match's bots and
+scripts on one machine, so they all see the same folder. A note that stops being rewritten (a bot that ended) is
+ignored after a few seconds.
 
 ## What it costs
 
@@ -157,9 +166,9 @@ per car; the heavier readings - [why this move and looking at](why-and-looking.m
 
 **Two panels on top of each other.** On one team: the copies don't recognise each other as the same bot, so each
 thinks it is the only one. Start them all from the same `bot.toml` (the same agent id) - the example folder has two
-(`bot.toml` and `thoughts.bot.toml`), and they count as two different bots. On both teams: they should split to the
-two sides by themselves (above); if they don't, check `side` isn't `"fixed"` in either panel file, and that both run
-as the same Windows user (one temp folder).
+(`bot.toml` and `thoughts.bot.toml`), and they count as two different bots. On both teams: they should share one panel by
+themselves (above); if they don't, check `share` isn't `"none"` in either panel file, and that both run as the same
+Windows user (one temp folder).
 
 **The panel shows a car I haven't picked.** Either you haven't followed any car yet (RLBot says player 0, see above),
 or you're on the free camera after following that car. Follow the car you want once.

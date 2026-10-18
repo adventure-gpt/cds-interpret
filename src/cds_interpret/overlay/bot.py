@@ -254,7 +254,7 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
     def _after(bot: Any, packet: Any) -> bool:
         """The frame's work; True when it drew."""
         share = bot._cds_th_share
-        share.beat(None, False)                         # (this overlay is running; what it shows: below)
+        share.alive()                                   # (this overlay is running; what it shows: below)
         if not has_ball(packet):                        # (the replay after a goal: nothing to read)
             return False
         check_worker(bot)
@@ -273,6 +273,13 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
             st["seeded"] = True
         spec = spectated(packet)
         panel_car, rule = st["follow"].pick(ours, spec)
+        conf = bot._cds_th_panel.config
+        # (overlay.share) more overlays in the match - both teams' thoughts: one panel, the camera's rules over all their
+        # cars; when another overlay's car has it, this one draws only its rings
+        share.beat(ours, [int(bot.team)], spec, box=st.get("box"))
+        shared_out = conf.share == "one" and not share.owns_panel(ours, spec)
+        if shared_out:
+            panel_car, rule = None, "hide"
         if panel_car != st.get("panel_car"):           # (a new car on the panel gets its "looking at" at once)
             st["panel_car"], st["sent"] = panel_car, 0
         wants = st["wants"]
@@ -343,24 +350,32 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
             marks.append((c, pt))
         th = st["cars"].get(panel_car) if panel_car in mine else None
         first_of_team = bool(mine) and bool(ours) and ours[0] in mine
+        from rlbot import flat
+        crowded = conf.share != "none" and share.crowded([int(bot.team)])
+        if conf.share == "one" and frame - st.get("measured", -10 ** 9) >= 60:
+            # this overlay's own panel size (about twice a second), for the shared panel: as big as the biggest
+            res_m = th if th is not None else next((st["cars"][c] for c in ours if c in st["cars"]), None)
+            if res_m is not None:
+                st["box"] = pnl.measure(flat, res_m, "-" if len(ours) > 1 and conf.subtitle else None,
+                                        available(bot, len(packet.players)), int(bot.team), crowded)
+                st["measured"] = frame
         if th is None and not marks:
             if not st["cleared"]:                       # (this copy no longer shows anything: take its drawing down)
                 bot.renderer.clear_render_group(GROUP)
                 st["cleared"] = True
             return True
         st["cleared"] = False
-        from rlbot import flat
-        cross = th is not None or (panel_car is None and first_of_team)
+        cross = th is not None or (panel_car is None and first_of_team and not shared_out)
         true = landing_point(getattr(bot, "ball_prediction", None)) if markers.prediction and cross else None
         sub = None
         if th is not None and len(ours) > 1 and pnl.config.subtitle:
             name = getattr(packet.players[panel_car], "name", "") if panel_car < len(packet.players) else ""
             sub = subtitle_text(pnl.config.subtitle, panel_car, ours, rule, str(name))
         state = _fresh(st["draw"], panel_car, frame) if th is not None and panel_car is not None else None
-        share.beat(int(bot.team), th is not None)
+        box = share.shared_box(st["box"]) if conf.share == "one" and st.get("box") is not None else None
         pnl.draw(bot.renderer, flat, th, car_index=panel_car, landing_true=true, state=state, frame=frame,
                  value_scale=bot._cds_th_scale, team=int(bot.team), marks=marks, subtitle=sub,
-                 available=available(bot, len(packet.players)), crowded=share.crowded(int(bot.team)))
+                 available=available(bot, len(packet.players)), crowded=crowded, box=box)
         return True
 
     def retire(bot: Any) -> None:

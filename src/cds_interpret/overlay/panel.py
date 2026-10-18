@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any
 
 from ..errors import CDSInterpretError
+from .share import SHARE_MODES
 from .team import DEFAULT_FOLLOW, check_follow, check_landing_for, check_subtitle
 
 PAD = 0.006
@@ -47,7 +48,6 @@ BAR_H = 0.009
 BAR_ROW = 0.016                         # a bar's line under its label
 CHAR_W = 0.0053                         # one character of RLBot's font at scale 1, as a fraction of the width
 FPS = 120
-SIDES = ("auto", "team", "fixed")      # [panel] side
 GROUP = "cds-interpret-thoughts"        # the render group the panel and its markers are drawn in
 
 ROW_KINDS = ("outlook", "action", "why", "looking", "noticing", "probes", "bar", "percent", "seconds", "value",
@@ -177,9 +177,10 @@ class PanelConfig:
     title: str | None = None             # None: the pack's title (make_pack(title=...)), "THOUGHTS" by default
     x: float = 0.012                     # top-left corner, as fractions of the screen
     y: float = 0.30
-    side: str = "auto"                   # two overlays (both teams' thoughts): "auto" - at x, y alone, on the teams'
-    #                                      sides (blue left, orange right: x mirrored) when the other team's overlay
-    #                                      shows too; "team" - always the teams' sides; "fixed" - always at x, y
+    share: str = "one"                   # more overlays in a match (both teams' thoughts; overlay.share): "one" -
+    #                                      one panel at x, y for all of them, following the camera rules over all their
+    #                                      cars, as big as the biggest of their panels; "sides" - each its own, on its
+    #                                      team's side (blue left, orange right); "none" - each as if alone
     width: float = 0.17                  # the panel's width, as a fraction of the screen's
     text_scale: float = 1.0
     title_scale: float = 1.2
@@ -209,24 +210,22 @@ class PanelConfig:
         if not isinstance(self.subtitle, str):
             raise CDSInterpretError(f"[panel] subtitle = {self.subtitle!r} should be text in quotes (\"\" for none)")
         self.subtitle = check_subtitle(self.subtitle, "[panel] subtitle")
-        if self.side not in SIDES:
-            close = difflib.get_close_matches(str(self.side), SIDES, n=1)
+        if self.share not in SHARE_MODES:
+            close = difflib.get_close_matches(str(self.share), SHARE_MODES, n=1)
             hint = f" Did you mean {close[0]!r}?" if close else ""
-            raise CDSInterpretError(f"[panel] side = {self.side!r}: use \"auto\" (the teams' sides of the screen when "
-                                    "the other team's overlay shows too), \"team\" (always) or \"fixed\" (always at "
-                                    f"x, y).{hint}")
+            raise CDSInterpretError(f"[panel] share = {self.share!r}: use \"one\" (one panel for every overlay in the "
+                                    "match, following the camera), \"sides\" (each its own, on its team's side) or "
+                                    f"\"none\" (each as if alone).{hint}")
 
-    def sided(self, team: int | None, crowded: bool = False) -> bool:
-        """Does the panel of this team's car go to its team's side (and take the team's colour)? ``crowded``: the
-        other team's overlay shows too (overlay.share)."""
-        if team is None or int(team) not in (0, 1) or self.side == "fixed":
-            return False
-        return self.side == "team" or bool(crowded)
+    def team_coloured(self, team: int | None, crowded: bool = False) -> bool:
+        """Do the title and the rings take the team's colour? While overlays of both teams run (``crowded``,
+        overlay.share), unless ``share`` is "none"."""
+        return bool(crowded) and team is not None and int(team) in (0, 1) and self.share != "none"
 
     def place(self, team: int | None, crowded: bool = False) -> float:
-        """The panel's left edge for this team's car: x, or on the team's side of the screen (blue left, orange
-        right) as the mirror image of x - see ``side``."""
-        if not self.sided(team, crowded):
+        """The panel's left edge for this team's car: x - or, with ``share`` "sides" while overlays of both teams run,
+        on the team's side of the screen (blue left, orange right) as the mirror image of x."""
+        if self.share != "sides" or not crowded or team is None or int(team) not in (0, 1):
             return self.x
         right = self.x + self.width / 2 > 0.5
         want_right = team == 1
@@ -594,6 +593,7 @@ class Panel:
         self._row_hooks = {i: _resolve(r.hook, self.hooks) for i, r in enumerate(config.rows) if r.kind == "custom"}
         self._marker_hook = _resolve(config.markers.hook, self.hooks)
         self._seen: set[str] = set()          # the readings results have carried so far (their rows keep a place)
+        self.size: tuple[float, float] | None = None   # (width, height) of the last panel drawn
 
     # ---- values
     def _smooth(self, state: dict[str, Any] | None, key: str, v: float) -> float:
@@ -656,7 +656,7 @@ class Panel:
              landing_true: Any = None, landing_think: Any = None, state: dict[str, Any] | None = None,
              frame: int | None = None, value_scale: float | None = None, team: int | None = None,
              marks: list[tuple[int | None, Any]] | None = None, subtitle: str | None = None,
-             available: Any = None, crowded: bool = False) -> None:
+             available: Any = None, crowded: bool = False, box: Any = None) -> None:
         """Draw one result (see the module's notes) and the markers.
 
         th: what the worker read for the panel's car (None: no panel, only ``marks``). car_index: the panel car's
@@ -665,33 +665,23 @@ class Panel:
         dict kept between draws for this car. value_scale: the outlook value that fills its bar when the config does
         not say. team: the panel car's team (0 blue, 1 orange: the word above it takes the team's colour). subtitle: the line under the title (whose thoughts these are). available: the readings the overlay
         can compute ({"why", "looking"}): with ``keep_size``, their rows keep their place before their first
-        reading. crowded: the other team's overlay shows too (overlay.share): with ``side`` "auto" the panel goes to
-        its team's side of the screen and its title and rings take the team's colour."""
+        reading. crowded: overlays of both teams run (overlay.share): the title and rings take the team's colour (and with
+        ``share`` "sides" the panel goes to its team's side). box: (x, y, width, height) of the panel all the match's
+        overlays share (overlay.share: every one's panel fits in it), or None: this panel's own. The background is the
+        box, so the panel keeps its size whichever overlay draws it; the rows start at its top-left corner."""
         cfg = self.config
-        sided = cfg.sided(team, crowded)
-        px = cfg.place(team, crowded)
-        team_col = cfg.colors["team_blue" if team == 0 else "team_orange"] if sided else None
+        team_col = cfg.colors["team_blue" if team == 0 else "team_orange"] if cfg.team_coloured(team, crowded) else None
         if marks is None:
             marks = [(car_index, landing_think)] if landing_think is not None else []
         renderer.begin_rendering(GROUP)
         driver = None
         if th is not None:
-            ready = _readings(available) | self._seen
-            d = RowDrawer(self, flat, px, cfg.y)
-            d.line("THOUGHTS" if cfg.title is None else cfg.title,
-                   left_color=d.color(*team_col) if team_col is not None else d.named("title"),
-                   scale=cfg.title_scale * cfg.text_scale)
-            d.gap(0.05)                                 # (the title takes 1.25 lines in all)
-            if subtitle:
-                d.line(subtitle, left_color=d.named("label"), scale=0.9 * cfg.text_scale)
-            feats = self._features_on(th)
-            placed = {r.source.split(":", 1)[1] for r in cfg.rows if r.source and r.source.startswith("probe:")}
-            vscale = cfg.value_scale if cfg.value_scale is not None else (value_scale or 1.0)
-            ctx: dict[str, Any] = {"ready": ready}
-            for i, row in enumerate(cfg.rows):
-                self._row(d, flat, th, row, i, feats, placed, state, frame, vscale, ctx)
-            d.cy += 0.002
-            renderer.draw_rect_2d(px, cfg.y - 0.006, cfg.width, d.cy - cfg.y + 0.006,
+            px = cfg.place(team, crowded)
+            bx, by, bw, bh = box if box is not None else (px, cfg.y, cfg.width, 0.0)
+            d, ctx, feats = self._layout(flat, th, state, frame, value_scale, subtitle, available, bx, by, team_col)
+            own_h = d.cy - by + 0.006
+            self.size = (cfg.width, own_h)
+            renderer.draw_rect_2d(bx, by - 0.006, max(bw, cfg.width), max(bh, own_h),
                                   d.color(*cfg.colors["background"]))
             for op in d.ops:
                 if op[0] == "r":
@@ -704,6 +694,40 @@ class Panel:
             self._car_label(renderer, flat, feats, car_index, driver, team)
         self._markers(renderer, flat, th, car_index, landing_true, marks, team, team_col)
         renderer.end_rendering()
+
+    def _layout(self, flat: Any, th: dict[str, Any], state: dict[str, Any] | None, frame: int | None,
+                value_scale: float | None, subtitle: str | None, available: Any, x: float, y: float,
+                title_color: Any = None) -> tuple[RowDrawer, dict[str, Any], list[dict[str, Any]]]:
+        """The panel's rows for one result, laid out from (x, y) - nothing drawn yet: (the drawer with its ops,
+        what the rows found, the features)."""
+        cfg = self.config
+        ready = _readings(available) | self._seen
+        d = RowDrawer(self, flat, x, y)
+        d.line("THOUGHTS" if cfg.title is None else cfg.title,
+               left_color=d.color(*title_color) if title_color is not None else d.named("title"),
+               scale=cfg.title_scale * cfg.text_scale)
+        d.gap(0.05)                                     # (the title takes 1.25 lines in all)
+        if subtitle:
+            d.line(subtitle, left_color=d.named("label"), scale=0.9 * cfg.text_scale)
+        feats = self._features_on(th)
+        placed = {r.source.split(":", 1)[1] for r in cfg.rows if r.source and r.source.startswith("probe:")}
+        vscale = cfg.value_scale if cfg.value_scale is not None else (value_scale or 1.0)
+        ctx: dict[str, Any] = {"ready": ready}
+        for i, row in enumerate(cfg.rows):
+            self._row(d, flat, th, row, i, feats, placed, state, frame, vscale, ctx)
+        d.cy += 0.002
+        return d, ctx, feats
+
+    def measure(self, flat: Any, th: dict[str, Any], subtitle: str | None = None, available: Any = None,
+                team: int | None = None, crowded: bool = False) -> tuple[float, float, float, float]:
+        """(x, y, width, height) this panel takes with this result, nothing drawn (its smoothing untouched) - what an
+        overlay tells the others (overlay.share) so the shared panel is as big as the biggest of theirs."""
+        cfg = self.config
+        seen = set(self._seen)
+        px = cfg.place(team, crowded)
+        d, _, _ = self._layout(flat, th, {}, None, None, subtitle, available, px, cfg.y)
+        self._seen = seen
+        return px, cfg.y, cfg.width, d.cy - cfg.y + 0.006
 
     def _row(self, d: RowDrawer, flat: Any, th: dict[str, Any], row: RowSpec, i: int, feats: list[dict[str, Any]],
              placed: set[str], state: dict[str, Any] | None, frame: int | None, vscale: float,
