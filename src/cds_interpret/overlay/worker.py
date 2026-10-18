@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from ..policy import describe_action, unmirror_controls
 from .pack import Thoughts, load_pack
 
 if TYPE_CHECKING:
@@ -152,7 +153,8 @@ def compute(th: Thoughts, msg: dict[str, Any], critic: Callable[[np.ndarray], An
             explainer: Explainer | None = None) -> dict[str, Any]:
     """One request -> one result per car. msg: "layer" [n, d] (the pack's layer), "output" [n, A] (the action
     output), optional "obs" [n, ...] (the network's input: for a critic and "why this move"), "land_h" [n, d'] (the
-    landing layer when it is another one), "frame". For the panel's car (row "panel"): "why" (True: its "why this
+    landing layer when it is another one), "frame", "cars" (the rows' player indices) and "state" (the game as Frames
+    fields of one packet: for a bot that sees the field mirrored, and for "looking at"). For the panel's car (row "panel"): "why" (True: its "why this
     move"), "looking" (True: its "looking at", from "state" - the game as Frames fields of one packet - seen by car
     slot "me", averaged over "donors" donor moments). Returns {"frame", "cars": [...], "notes": [...]}."""
     layer = np.asarray(msg["layer"], np.float32)
@@ -169,6 +171,14 @@ def compute(th: Thoughts, msg: dict[str, Any], critic: Callable[[np.ndarray], An
         land_h = layer
     panel = msg.get("panel")
     notes_before = len(explainer.notes) if explainer is not None else 0
+    notes: list[str] = []
+    # a bot that sees the field mirrored at some moments: which cars see this one mirrored (its policy says)
+    flags = explainer.mirrored(msg.get("state"), msg.get("cars")) if explainer is not None else None
+    if th.land_frame == "mirrored" and flags is None and not getattr(th, "_noted_mirror", False):
+        th._noted_mirror = True  # type: ignore[attr-defined]
+        notes.append("the landing readout was fitted in the bot's own mirrored frame, so the overlay needs the bot's "
+                     "policy with its mirror function (with_thoughts(..., policy=...), Policy(mirror=...)) to draw "
+                     "the rings; until then they stay hidden")
     cars = []
     for k in range(n):
         out_k = None if out_rows is None else out_rows[k]
@@ -176,7 +186,14 @@ def compute(th: Thoughts, msg: dict[str, Any], critic: Callable[[np.ndarray], An
         if value[k] is not None:
             r["value"] = value[k]
         if land_h is not None and th.land is not None:
-            r["land_xy"] = th.land_xy(land_h[k])
+            xy = th.land_xy(land_h[k])
+            if th.land_frame == "mirrored":             # (turned back from the bot's own frame, or not drawn)
+                xy = None if flags is None or xy is None else [-xy[0] if flags[k] else xy[0], xy[1]]
+            r["land_xy"] = xy
+        if flags is not None and flags[k] and r.get("action") and th.table is not None:
+            a = r["action"]["index"]                    # (the move in the controls it really sends)
+            r["action"]["words"] = describe_action(unmirror_controls(th.table[a]))
+            r["mirrored"] = True
         if explainer is not None and panel is not None and int(panel) == k:
             a = _action_of(th, out_k)
             if msg.get("why") and a is not None:
@@ -186,8 +203,8 @@ def compute(th: Thoughts, msg: dict[str, Any], critic: Callable[[np.ndarray], An
                 r["looking"] = explainer.looking(msg.get("state"), int(msg.get("me", 0)), a,
                                                  int(msg.get("donors", 3)))
         cars.append(r)
-    notes = explainer.notes[notes_before:] if explainer is not None else []
-    return {"frame": msg.get("frame"), "cars": cars, "notes": list(notes)}
+    notes += explainer.notes[notes_before:] if explainer is not None else []
+    return {"frame": msg.get("frame"), "cars": cars, "notes": notes}
 
 
 def serve(conn: Any, pack_path: str, critic_spec: str | None = None, policy_spec: str | None = None) -> None:

@@ -405,6 +405,7 @@ class Study:
         self.edit_results: dict[str, dict[str, float]] = {}
         self.feature_checks: dict[tuple[str, int], FeatureCheck] = {}
         self.attribution_results: dict[str, Any] | None = None
+        self.landing_results: dict[str, Any] | None = None
         self.extra_sections: dict[str, str] = {}
         self.log(f"Studying {policy.name} on {len(moments):,} moments from {moments.n_games} games "
                  f"({len(np.unique(self.games[self.test]))} games kept aside to score on). "
@@ -487,6 +488,34 @@ class Study:
         y = np.stack([self.labels[k] for k in labels], 1)
         ok = self.test[np.isfinite(y[self.test]).all(1)]
         return P.readout_stability(w, b, self.activations(layer), ok, y=y, seq=self.moments.seq, order=self.moments.step)
+
+    def landing(self, layer: str | None = None, layers: list[str] | None = None) -> dict[str, Any]:
+        """The landing readout for the live panel's ring (probes.fit_landing): a ridge readout of where the ball will
+        land, its penalty chosen on validation games by the median miss. Without ``layer``, each of ``layers``
+        (default: the study's) is tried and the one with the smallest validation miss is kept - often an early layer,
+        which keeps places best. A bot with a mirror function (Policy(mirror=...)) gets its readout in its own
+        mirrored frame. Returns fit_landing's dict with "layer"; also kept as ``study.landing_results``."""
+        from . import probes as P_
+        if not all(k in self.labels for k in ("land_x", "land_y")):
+            raise CDSInterpretError("these moments have no landing labels (land_x, land_y)")
+        xy = np.stack([self.labels["land_x"], self.labels["land_y"]], 1)
+        mirrored = self.policy.mirrored(self.moments.frames, self.moments.me)
+        cands = [self._check_layer(layer)] if layer is not None else list(layers or self.layers)
+        best: dict[str, Any] | None = None
+        for lay in cands:
+            fit = P_.fit_landing(self.activations(lay), xy, self.train, self.test, self.games, seq=self.moments.seq,
+                                 order=self.moments.step, mirrored=mirrored)
+            fit["layer"] = lay
+            fit["validation_miss"] = min(t["median_miss"] for t in fit["tried"])
+            if best is None or fit["validation_miss"] < best["validation_miss"]:
+                best = fit
+        assert best is not None
+        self.landing_results = best
+        jump = f", moves {best['median_jump']:.0f} uu between readings" if best.get("median_jump") is not None else ""
+        self.log(f"  landing ring: {best['layer']} misses by {best['median_miss']:.0f} uu typically (90% within "
+                 f"{best['p90_miss']:.0f}){jump}" + (" - in the bot's own mirrored frame" if best["frame"] ==
+                                                     "mirrored" else ""))
+        return best
 
     # ---- features
     def features(self, layer: str, m: int | None = None, k: int | None = None, steps: int = 2000, batch: int = 1024,
@@ -703,7 +732,7 @@ class Study:
                   donors: int = 32) -> dict[str, Any]:
         """A thoughts pack for the live overlay from this study: named features of ``layer``'s SAE, probes of
         ``layer`` {display name: label or (label, look)}, the landing marker from ``land_layer`` (default: the
-        layer whose land_x / land_y readout is steadiest among those that read it well), and an outlook probe
+        layer whose landing readout misses least on held-out games - ``landing()``), and an outlook probe
         (the ``outlook`` label) when the moments have it. names: a names file (or names.Names) whose confirmed
         names become the pack's features, with their thresholds (added to ``features``). decoders: keep the
         features' decoder directions (the panel's "why this move"); donors: how many recorded moments to keep for
@@ -770,19 +799,60 @@ class Study:
                 OP.add_donors(pk, self.moments, n=donors)
             except CDSInterpretError as e:
                 self.log(f"  (no moments for 'looking at': {e})")
+        for q in pk["probes"]:                          # (each probe's label: what a refit for a new checkpoint fits)
+            spec = (probes or {}).get(q["name"])
+            q["label"] = spec if isinstance(spec, str) else spec[0] if spec else None
+        if fs is not None:
+            pk["meta"]["sae"] = {"m": int(fs.sae.m), "k": int(fs.sae.k), "fingerprint": fs.fingerprint}
         moves = all(k in self.labels and np.nanstd(self.labels[k]) > 50.0 for k in ("land_x", "land_y"))
-        if land_layer is None and moves:
-            cands = [(self.steadiness(lay)["miss_med"], lay) for lay in pr.by_layer
-                     if "land_x" in pr.by_layer[lay] and "land_y" in pr.by_layer[lay]]
-            land_layer = min(cands)[1] if cands else None
-        if land_layer is None:
+        if not moves:
             self.log("  (no landing marker: the ball's landing point didn't vary enough in these games to learn it)")
         else:
-            px, py = pr.probe(land_layer, "land_x"), pr.probe(land_layer, "land_y")
-            st = self.steadiness(land_layer)
-            OP.add_land(pk, land_layer, np.stack([px.w.numpy(), py.w.numpy()], 1), [px.b, py.b],
-                        {"miss_med": st.get("miss_med"), "jitter": st.get("jitter")})
+            fit = self.landing(land_layer)
+            OP.add_land(pk, fit["layer"], fit["w"], fit["b"],
+                        {k: fit.get(k) for k in ("lambda", "median_miss", "p90_miss", "median_jump", "label_jump")},
+                        frame=fit["frame"])
         return pk
+
+    def calibrate_pack(self, pack: dict[str, Any], min_gain: float = 0.0, min_pos: int = 10) -> dict[str, dict]:
+        """Calibrate a pack's yes / no gauges so that 40% on the panel means 40%: for each binary probe of the pack
+        with a label (packs from make_pack remember them), Platt scaling fitted on half of this study's held-out games
+        and checked on the other half; applied (readout.calibrate_pack_probe) when it lowers the calibration error by
+        more than ``min_gain``. Returns per probe {"ece_before", "ece_after", "applied", "a", "b"} or {"skipped": why}.
+        The held-out games are this study's own - record the mode the gauges matter in (a recording of 2v2 games only
+        is calibrated on 2v2)."""
+        from . import readout as RO
+        h = self.activations(pack["layer"]).double().numpy()
+        test = self.test
+        games = np.unique(self.games[test])
+        half = np.isin(self.games[test], games[::2])
+        cal, check = test[half], test[~half]
+        out: dict[str, dict] = {}
+        for q in pack.get("probes") or []:
+            lab = q.get("label")
+            if not str(q.get("kind", "")).startswith("bin"):
+                continue
+            if not lab or lab not in self.labels:
+                out[q["name"]] = {"skipped": "the pack doesn't say which label it reads" if not lab else
+                                  f"these moments have no {lab!r} label"}
+                continue
+            y = np.asarray(self.labels[lab], np.float64)
+            sc = h @ np.asarray(q["w"], np.float64) + float(q["b"])
+            c_ok, k_ok = cal[np.isfinite(y[cal])], check[np.isfinite(y[check])]
+            if min((y[c_ok] > 0.5).sum(), (y[k_ok] > 0.5).sum()) < min_pos:
+                out[q["name"]] = {"skipped": f"fewer than {min_pos} times it happened in each half of the held-out games"}
+                continue
+            shown = (lambda v: 1.0 / (1.0 + np.exp(-v))) if q["kind"] == "bin_logit" else (lambda v: np.clip(v, 0, 1))
+            a, b = RO.fit_platt(sc[c_ok], y[c_ok])
+            e0 = RO.calibration(shown(sc[k_ok]), y[k_ok])["ece"]
+            e1 = RO.calibration(RO.apply_platt((a, b), sc[k_ok]), y[k_ok])["ece"]
+            applied = bool(e1 < e0 - min_gain)
+            if applied:
+                RO.calibrate_pack_probe(pack, q["name"], a, b)
+            out[q["name"]] = {"ece_before": float(e0), "ece_after": float(e1), "applied": applied, "a": float(a),
+                              "b": float(b)}
+            self.log(f"  {q['name']!r}: calibration error {e0:.3f} -> {e1:.3f}" + ("" if applied else " (kept as it was)"))
+        return out
 
     # ---- the report
     def report(self, path: str | os.PathLike[str] = "report.html", title: str | None = None) -> Path:

@@ -499,6 +499,76 @@ def ridge_suite(x: torch.Tensor, labels: dict[str, np.ndarray], kinds: dict[str,
     return out
 
 
+LAMBDAS_LAND = (1e-5, 1e-4, 1e-3, 3e-3, 1e-2, 3e-2, 1e-1)   # times the layer's mean unit variance
+
+
+def fit_landing(x: torch.Tensor, xy: np.ndarray, train: np.ndarray, test: np.ndarray, groups: np.ndarray,
+                seq: np.ndarray | None = None, order: np.ndarray | None = None, mirrored: np.ndarray | None = None,
+                lams=LAMBDAS_LAND, seed: int = 1) -> dict:
+    """A place readout for the live panel - where the ball will land, (x, y) = h @ w + b - fitted for what shows on
+    screen: the ridge penalty is the one with the smallest MEDIAN MISS (the distance from the true point) on
+    validation games held out of the fit, not the best R2 of x and y apart.
+
+    x [N, D]: the layer's values; xy [N, 2]: the point (team frame; NaN rows are left out); train / test: row indices
+    (whole games each side); groups [N]: the game of each row (the validation games are taken from the training
+    games); seq / order (a per-row sequence key and time, as readout_stability): for the jump between readings.
+    mirrored [N] bool (Policy.mirrored): for a bot that sees the field mirrored left to right at some moments - its
+    layers can't tell the two sides apart, so the readout is fitted in ITS frame (x negated on those rows) and the
+    overlay turns it back with the same flag (frame "mirrored").
+
+    Returns {"w" [D, 2], "b" [2], "lambda", "frame", "median_miss", "p90_miss", "median_jump" (uu, on the test
+    games: the jump is the median move between consecutive readings of one car), "label_jump" (the same for the
+    true point), "tried": [per penalty: lambda, median_miss, p90_miss on the validation games]}."""
+    x = _tensor(x)
+    y = np.asarray(xy, np.float64).reshape(len(x), 2).copy()
+    frame = "team"
+    if mirrored is not None and np.asarray(mirrored).any():
+        m = np.asarray(mirrored, bool).reshape(-1)
+        y[m, 0] *= -1.0
+        frame = "mirrored"
+    ok = np.isfinite(y).all(1)
+    train, test = np.asarray(train)[ok[train]], np.asarray(test)[ok[test]]
+    if len(train) < 100 or len(test) < 20:
+        raise CDSInterpretError(f"fit_landing: too few moments with a landing point ({len(train)} in the training "
+                                f"games, {len(test)} held out). Record more games.")
+    sub_tr, sub_va = group_split(np.asarray(groups)[train], 0.2, seed=seed)
+    fit_rows, val_rows = train[sub_tr], train[sub_va]
+
+    def solve(rows: np.ndarray, lam_list) -> list[tuple[np.ndarray, np.ndarray]]:
+        n, s1, s2 = _moments(x, rows)
+        mu = (s1 / n).numpy()
+        g = s2.numpy() / n - np.outer(mu, mu)
+        ym = y[rows].mean(0)
+        c = _cross(x, rows, y - ym).numpy() / n
+        scale = float(np.mean(np.diag(g))) or 1.0
+        out = []
+        for lam in lam_list:
+            w = np.linalg.solve(g + lam * scale * np.eye(len(g)), c)
+            out.append((w, ym - mu @ w))
+        return out
+
+    def score(rows: np.ndarray, w: np.ndarray, b: np.ndarray) -> np.ndarray:
+        return _scores(x, rows, torch.from_numpy(w), torch.from_numpy(b))
+
+    tried = []
+    fits = solve(fit_rows, lams)
+    for lam, (w, b) in zip(lams, fits):
+        miss = np.linalg.norm(score(val_rows, w, b) - y[val_rows], axis=1)
+        tried.append({"lambda": float(lam), "median_miss": float(np.median(miss)),
+                      "p90_miss": float(np.quantile(miss, 0.9))})
+    best = min(tried, key=lambda t: t["median_miss"])
+    w, b = solve(train, [best["lambda"]])[0]
+    pred = score(test, w, b)
+    miss = np.linalg.norm(pred - y[test], axis=1)
+    out = {"w": w.astype(np.float32), "b": b.astype(np.float32), "lambda": best["lambda"], "frame": frame,
+           "median_miss": float(np.median(miss)), "p90_miss": float(np.quantile(miss, 0.9)), "tried": tried,
+           "train_rows": int(len(train)), "test_rows": int(len(test))}
+    if seq is not None:
+        st = _steadiness(pred, np.linalg.norm(w, axis=0), NOISE_SD, test, seq, order, y[test])
+        out["median_jump"], out["label_jump"] = st.get("jitter"), st.get("jitter_label")
+    return out
+
+
 def headline(res: dict) -> float:
     """The one number of a probe result: R^2 for a regression label, AUROC for a binary one."""
     return res["r2"] if "r2" in res else res["auroc"]

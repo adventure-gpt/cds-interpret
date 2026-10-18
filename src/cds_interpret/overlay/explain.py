@@ -133,6 +133,15 @@ class Explainer:
     def available(self) -> dict[str, Any]:
         return {"why": self.why_ok, "looking": sorted(self._donors) if self.looking_ok else []}
 
+    def mirrored(self, state: dict[str, Any] | None, cars: Any) -> np.ndarray | None:
+        """[n] bool: which of these cars (player indices) see the live moment ``state`` mirrored, or None when the
+        policy has no mirror function (or there is no state)."""
+        if self.policy is None or self.policy.mirror_fn is None or state is None or cars is None:
+            return None
+        cars = np.asarray(cars, np.int64).reshape(-1)
+        fr = Frames({k: np.repeat(np.asarray(v)[None], len(cars), 0) for k, v in state.items()})
+        return self.policy.mirrored(fr, cars)
+
     def _off(self, what: str, e: Exception) -> None:
         if what == "why":
             self.why_ok = False

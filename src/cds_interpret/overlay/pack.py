@@ -125,17 +125,22 @@ def make_pack(layer: str, sae: Any = None, features: dict[str, int] | None = Non
     return pack
 
 
-def add_land(pack: dict[str, Any], module: str, w: Any, b: Any, info: dict[str, Any] | None = None) -> dict[str, Any]:
+def add_land(pack: dict[str, Any], module: str, w: Any, b: Any, info: dict[str, Any] | None = None,
+             frame: str = "team") -> dict[str, Any]:
     """The landing marker read from its own layer ``module``: (x, y) = h @ w + b with w [D, 2], b [2], in the
     bot's TEAM frame (the frame the labels use: it attacks +y). A place on the field often reads best - and far
     more steadily - from an EARLY layer: fit it with probes.ridge_suite on land_x / land_y there and check
     probes.readout_stability first (docs/howto/probes.md). While the bot plays, that layer is copied by one more
-    read-only hook. info: anything to keep with it (how it was fitted, its held-out numbers)."""
+    read-only hook. info: anything to keep with it (how it was fitted, its held-out numbers). frame: "team", or
+    "mirrored" for a readout fitted in the bot's own mirrored frame (Policy(mirror=...)): the overlay then turns it
+    back with the policy's mirror flag, and draws no ring without one."""
     w = np.asarray(w, np.float32)
     b = np.asarray(b, np.float32).reshape(-1)
     if w.ndim != 2 or w.shape[1] != 2 or b.shape != (2,):
         raise ShapeError(f"add_land: w must be [D, 2] and b [2], not {w.shape} and {b.shape}")
-    pack["land"] = {"module": str(module), "w": w, "b": b, "info": dict(info or {})}
+    if frame not in ("team", "mirrored"):
+        raise CDSInterpretError(f"add_land: frame should be \"team\" or \"mirrored\", not {frame!r}")
+    pack["land"] = {"module": str(module), "w": w, "b": b, "info": dict(info or {}), "frame": frame}
     return pack
 
 
@@ -239,7 +244,8 @@ def save_pack(pack: dict[str, Any], path: str | os.PathLike[str]) -> str:
     if pack.get("land") is not None:
         arrays["land_w"] = np.asarray(pack["land"]["w"], np.float32)
         arrays["land_b"] = np.asarray(pack["land"]["b"], np.float32)
-        meta["land"] = {"module": pack["land"]["module"], "info": pack["land"].get("info", {})}
+        meta["land"] = {"module": pack["land"]["module"], "info": pack["land"].get("info", {}),
+                        "frame": pack["land"].get("frame", "team")}
     if pack.get("donors"):
         meta["donors"] = []
         for g, grp in enumerate(pack["donors"]):
@@ -268,7 +274,8 @@ def load_pack(path: str | os.PathLike[str]) -> dict[str, Any]:
         pack["table"] = z.get("table")
         pack["outlook"] = {"w": z["outlook_w"], "b": meta["outlook_b"]} if "outlook_w" in z else None
         pack["land"] = ({"module": meta["land"]["module"], "w": z["land_w"], "b": z["land_b"],
-                         "info": meta["land"].get("info", {})} if "land_w" in z else None)
+                         "info": meta["land"].get("info", {}), "frame": meta["land"].get("frame", "team")}
+                        if "land_w" in z else None)
         pack["donors"] = [{"cars": int(g["cars"]), "me": z[f"donors{i}_me"],
                            "data": {k: z[f"donors{i}_{k}"] for k in g["fields"]}}
                           for i, g in enumerate(meta.get("donors") or [])]
@@ -293,6 +300,7 @@ class Thoughts:
         self.outlook = None if ol is None else (np.asarray(ol["w"], np.float32), float(ol["b"]))
         land = pack.get("land")
         self.land_module = None if land is None else land["module"]
+        self.land_frame = "team" if land is None else str(land.get("frame", "team"))   # or "mirrored"
         self.land = None if land is None else (np.asarray(land["w"], np.float32), np.asarray(land["b"], np.float32))
         # "why this move": the named features' decoder directions [F, D] (None when the pack has none)
         self.fd = (np.stack([np.asarray(f["d"], np.float32) for f in fs])

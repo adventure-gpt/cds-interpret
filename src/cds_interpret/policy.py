@@ -55,6 +55,17 @@ def lookup_table() -> np.ndarray:
     return np.asarray(rows, dtype=np.float32)
 
 
+MIRROR_COLS = (1, 3, 4)                 # steer, yaw, roll: what changes sign when the field is seen mirrored
+
+
+def unmirror_controls(row: Any) -> np.ndarray:
+    """Controls [..., 8] as a bot that saw the field mirrored left to right really sends them: steer, yaw and roll
+    with their signs flipped."""
+    out = np.array(row, np.float32, copy=True)
+    out[..., list(MIRROR_COLS)] *= -1.0
+    return out
+
+
 def describe_action(row: Any) -> str:
     """Controls [8] in words: ``"throttle, steer left, boost"``."""
     t, s, p, y, r, j, b, h = (float(v) for v in np.asarray(row, dtype=np.float64).reshape(8))
@@ -105,11 +116,17 @@ class Policy:
         value: an optional critic, ``value(x) -> [N]`` (the overlay's outlook bar; reports).
         name: what reports and the overlay call it.
         device: where the network runs ("cpu" is the default and the safe choice for everything here).
+        mirror: for a bot whose observation shows the field mirrored left to right at some moments (x negated, so
+            one side looks like the other - some bots do this to learn both sides at once): ``mirror(frames, me) ->
+            [N] bool``, True where moment i is seen mirrored by car slot me[i]. Its network then can't tell the two
+            sides apart, so the toolkit fits place readouts (the landing ring) in the bot's own frame and turns them
+            back with this, and flips steer, yaw and roll when it says a move in words. See docs/howto/probes.md.
     """
 
     def __init__(self, net: torch.nn.Module, obs: ObsFn | None = None, forward: Callable[[torch.Tensor], Any] | None = None,
                  output: str = "logits", actions: Any = None, value: Callable[[torch.Tensor], Any] | None = None,
-                 name: str = "policy", device: str | torch.device = "cpu"):
+                 name: str = "policy", device: str | torch.device = "cpu",
+                 mirror: Callable[[Frames, np.ndarray], Any] | None = None):
         if not isinstance(net, torch.nn.Module):
             raise TypeError(f"Policy needs a torch.nn.Module, got {type(net).__name__}")
         if isinstance(net, torch.jit.ScriptModule):
@@ -131,6 +148,7 @@ class Policy:
         self.value_fn = value
         self.name = name
         self.device = torch.device(device)
+        self.mirror_fn = mirror
 
     def __repr__(self) -> str:
         n = sum(p.numel() for p in self.net.parameters())
@@ -229,6 +247,16 @@ class Policy:
         v = v[0] if isinstance(v, (tuple, list)) else v
         return np.asarray(v.detach().cpu() if torch.is_tensor(v) else v, np.float32).reshape(-1)
 
+    def mirrored(self, frames: Frames, me: Any) -> np.ndarray:
+        """[N] bool: the moments this bot sees mirrored left to right (all False without a ``mirror`` function)."""
+        me = np.broadcast_to(np.asarray(me, dtype=np.int64), (len(frames),))
+        if self.mirror_fn is None:
+            return np.zeros(len(frames), bool)
+        m = self.mirror_fn(frames, me)
+        m = m.detach().cpu().numpy() if torch.is_tensor(m) else np.asarray(m)
+        m = np.broadcast_to(m.astype(bool).reshape(-1), (len(frames),))
+        return m.copy()
+
     def require_obs(self) -> None:
         """Raise a friendly error when the policy has no obs function."""
         if self.obs_fn is None:
@@ -284,13 +312,13 @@ class Policy:
         name = f"{self.name} (random weights)"
         forward = self._forward
         if forward is None:
-            return Policy(net, self.obs_fn, None, self.output, self.actions, None, name, self.device)
+            return Policy(net, self.obs_fn, None, self.output, self.actions, None, name, self.device, self.mirror_fn)
         owner = getattr(forward, "__self__", None)
         if isinstance(owner, torch.nn.Module):
             for m_old, m_new in zip(self.net.modules(), net.modules()):
                 if m_old is owner:
                     return Policy(net, self.obs_fn, getattr(m_new, forward.__name__), self.output, self.actions, None,
-                                  name, self.device)
+                                  name, self.device, self.mirror_fn)
         return _SwappedWeights(self, {k: v.detach().clone() for k, v in net.state_dict().items()}, name)
 
 
@@ -299,7 +327,8 @@ class _SwappedWeights(Policy):
     function that refers to the network itself)."""
 
     def __init__(self, base: Policy, state: dict[str, torch.Tensor], name: str):
-        super().__init__(base.net, base.obs_fn, base._forward, base.output, base.actions, None, name, base.device)
+        super().__init__(base.net, base.obs_fn, base._forward, base.output, base.actions, None, name, base.device,
+                         base.mirror_fn)
         self._state = state
 
     @contextmanager
