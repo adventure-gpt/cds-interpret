@@ -51,6 +51,9 @@ def main() -> None:
                            probes={"Threat on goal": "threat", "First to the ball": "first_to_ball",
                                    "Time to the ball": ("ttb_me", {"unit": "s"})},
                            title="DEMO BOT'S MIND", value_scale=1.0)
+    # recorded 2v2 and 3v3 moments too, so "looking at" also works when the demo bot plays in a team
+    teams = [ci.record.rocketsim(policy, games=2, seconds=40, team_size=n, opponent="chaser", log=None) for n in (2, 3)]
+    ci.overlay.add_donors(pack, teams)
     path = ci.overlay.save_pack(pack, HERE / "thoughts.npz")
     study.report(HERE / "report.html", title="The demo bot, inside")
     print(f"wrote {path} ({len(named)} named features: {', '.join(named)}) and report.html")

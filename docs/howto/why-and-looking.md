@@ -89,12 +89,13 @@ cds-interpret check-panel panel.toml thoughts.npz --policy my_bot.interp:make_po
 ```
 
 ```text
-  why this move: works, 0.7 ms a reading on one thread
-  looking at: works, 1.8 ms a reading on one thread
+  why this move: works, 1.0 ms a reading on one thread
+  looking at: works, 4.8 ms a reading on one thread
 panel.toml is fine, and everything it shows is in thoughts.npz.
 ```
 
-(That's the demo bot. `cds-interpret panel panel.toml` writes a panel file if you don't have one yet.) If something is
+(That's the demo bot, timed on the largest mode its pack has moments of - 3v3. `cds-interpret panel panel.toml`
+writes a panel file if you don't have one yet.) If something is
 missing, it says what and how to add it.
 
 ## How to read "Why this move"
@@ -156,7 +157,7 @@ waits for them, and a busy helper simply skips a reading.
 | | what it runs | demo bot (12,000 weights) | a 21-million-weight bot |
 |---|---|---|---|
 | why this move | your network once more, forward and back, on one input | under 1 ms | about 2 ms |
-| looking at | your obs function and network on 24 inputs (1v1) or 48 (team modes), in one batch | about 2 ms | 20-40 ms |
+| looking at | your obs function and network on 24 inputs (1v1) or 48 (team modes), in one batch | 2-5 ms | 20-40 ms |
 
 `cds-interpret check-panel ... --policy ...` measures both on your machine.
 

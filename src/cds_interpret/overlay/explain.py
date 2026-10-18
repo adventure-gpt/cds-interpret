@@ -238,7 +238,8 @@ def looking_shares(policy: Policy, codec: FramesCodec, live: Frames, me: int, ac
 
 
 def try_readings(pack: Any, policy: Any, donors: int = 3, repeats: int = 5) -> dict[str, Any]:
-    """Run "why this move" and "looking at" once on the pack's own donor moments, as the overlay would in a match:
+    """Run "why this move" and "looking at" on the pack's own donor moments (of the largest mode it has: the
+    costliest), as the overlay would in a match:
     whether they work with this policy, and what they cost on one thread. {"why_ms", "looking_ms" (None when off),
     "problems": [...]}. pack: a pack, its file or a Thoughts; policy: a Policy or "module:factory"."""
     from .pack import load_pack

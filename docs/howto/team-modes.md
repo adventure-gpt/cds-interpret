@@ -146,6 +146,10 @@ or you're on the free camera after following that car. Follow the car you want o
 **A car has no ring.** Check `landing_for`, and that the pack has a landing readout at all (`make_pack` adds one when
 the ball's landing point varied enough in its games).
 
+**"Looking at" shows in 1v1 but not in 2v2 or 3v3.** It compares the moment with recorded moments of the same mode,
+and the pack has only 1v1 ones. Record a few games of the mode (`ci.record.rocketsim(policy, games=2, team_size=2)`,
+or your bot in RLBot) and add them: `ci.overlay.add_donors(pack, [moments_2v2, moments_3v3])`.
+
 **A Hivemind's panel shows the wrong car's thoughts.** Its network runs on its cars in another order than `indices`,
 or only on some of them each tick. The bot's log says so once if the number of rows and cars differ.
 
