@@ -784,11 +784,13 @@ class Panel:
             if push >= row.min_push and frame is not None:
                 held[name] = frame
             recent = frame is not None and name in held and frame - held[name] < hold
-            if (push >= row.min_push or recent) and sm > 0:
+            if (push >= row.min_push or (recent and push > 0)) and sm > 0:   # (held only while it still pushes for)
                 toward.append((sm, style.label or name))
             if push < 0 and (against is None or push < against[0]):
                 against = (push, style.label or name)
         toward.sort(key=lambda t: -t[0])
+        if against is not None and against[0] <= -row.strong:            # (never listed both ways in one draw)
+            toward = [t for t in toward if t[1] != against[1]]
         if toward:
             ctx["driver"] = toward[0][1]
             for sm, label in toward[:n_max]:

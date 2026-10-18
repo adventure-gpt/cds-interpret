@@ -404,6 +404,12 @@ def test_why_holds_a_moment_and_looking_keeps_its_last_reading():
     r = FakeRenderer()
     p.draw(r, fake_flat(), later, state=state, frame=200)         # long after: gone
     assert "+ ball high" not in _texts(r) and "no named idea" in _texts(r)
+    p.draw(FakeRenderer(), fake_flat(), RESULT, state=state, frame=210)
+    flipped = dict(RESULT, why=[{"name": "ball high", "push": -0.9}, {"name": "about to hit", "push": 0.3},
+                                {"name": "full tank", "push": 0.0}])
+    r = FakeRenderer()
+    p.draw(r, fake_flat(), flipped, state=state, frame=215)       # it turned against the move: never listed both ways
+    assert "- ball high" in _texts(r) and "+ ball high" not in _texts(r) and "+ about to hit" in _texts(r)
 
 
 def test_panel_keeps_its_size():
