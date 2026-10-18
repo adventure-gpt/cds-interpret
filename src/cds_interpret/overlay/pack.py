@@ -21,7 +21,11 @@ What it holds:
 - **outlook**: the outlook bar (green right: it expects to score; red left: in trouble) comes from your critic when
   the overlay is given one, else from a probe named in ``outlook_probe`` (fit one on the ``outlook`` label);
 - **land** (optional, :func:`add_land`): the landing marker - where the network thinks the ball will come down -
-  read from its own layer, often an earlier one.
+  read from its own layer, often an earlier one;
+- **decoders** (made by default, or :func:`add_decoders`): each named feature's decoder direction, for the
+  "why this move" row - how hard each feature pushes the move the policy leans to;
+- **donors** (optional, :func:`add_donors`): a few dozen real recorded moments, for the "looking at" row - what the
+  move rests on: the bot's own car, the ball, the opponents, the team-mates.
 
 Packs are saved as a plain ``.npz`` file (arrays and JSON text, no pickled code): safe to load from anyone.
 """
@@ -35,9 +39,12 @@ from typing import Any
 import numpy as np
 
 from ..errors import CDSInterpretError, ShapeError
+from ..frames import REQUIRED, Frames
 from ..policy import describe_action
 
 FORMAT = "cds-interpret.thoughts"
+VERSION = 2                             # 2 (0.2): decoder directions and donor moments; 1 (0.1) still loads
+DONOR_FIELDS = REQUIRED + ("prev_controls",)
 DEFAULT_COLORS = [(0, 170, 255), (255, 196, 64), (90, 220, 120), (240, 90, 80), (200, 120, 255), (255, 140, 60)]
 
 
@@ -58,7 +65,7 @@ def _probe_parts(p: Any) -> tuple[np.ndarray, float, str]:
 def make_pack(layer: str, sae: Any = None, features: dict[str, int] | None = None,
               thresholds: dict[Any, float] | None = None, probes: dict[str, Any] | None = None, actions: Any = None,
               output: str = "logits", output_layer: str = "", title: str = "THOUGHTS", value_scale: float = 1.0,
-              outlook_probe: Any = None, meta: dict[str, Any] | None = None) -> dict[str, Any]:
+              outlook_probe: Any = None, meta: dict[str, Any] | None = None, decoders: bool = True) -> dict[str, Any]:
     """A pack for the module ``layer`` (its path in the network your bot runs; see the module's notes).
 
     Args:
@@ -73,8 +80,10 @@ def make_pack(layer: str, sae: Any = None, features: dict[str, int] | None = Non
         title: the panel's title. value_scale: the outlook value that fills the bar.
         outlook_probe: a probe whose readout is the outlook when the overlay has no critic (e.g. one fitted on the
             ``outlook`` label, which runs from -1 to +1).
+        decoders: keep each named feature's decoder direction too (a row of the layer's width each), for the
+            panel's "why this move" row.
     """
-    pack: dict[str, Any] = {"format": FORMAT, "version": 1, "layer": str(layer), "features": [], "probes": [],
+    pack: dict[str, Any] = {"format": FORMAT, "version": VERSION, "layer": str(layer), "features": [], "probes": [],
                             "table": None if actions is None else np.asarray(actions, np.float32),
                             "meta": {"title": title, "value_scale": float(value_scale), "output": output,
                                      "output_layer": output_layer, **(meta or {})},
@@ -92,6 +101,8 @@ def make_pack(layer: str, sae: Any = None, features: dict[str, int] | None = Non
         b = float(sae.b_enc[j].detach() - sae.b_pre.detach() @ sae.W_enc[:, j].detach())
         pack["features"].append({"name": str(name), "index": j, "w": w, "b": b,
                                  "threshold": float(th.get(name, th.get(j, 0.0)))})
+        if decoders:
+            pack["features"][-1]["d"] = _direction(sae, j)
     for i, (name, p) in enumerate((probes or {}).items()):
         look: dict[str, Any] = {}
         if isinstance(p, tuple) and len(p) == 2 and isinstance(p[1], dict):
@@ -128,15 +139,96 @@ def add_land(pack: dict[str, Any], module: str, w: Any, b: Any, info: dict[str, 
     return pack
 
 
+def _direction(sae: Any, j: int) -> np.ndarray:
+    """Feature j's decoder direction in the layer's units [D] (what the feature adds to the layer per unit of its
+    activation)."""
+    d = sae.feature_direction(int(j)) if hasattr(sae, "feature_direction") else sae.W_dec[int(j)] * sae.scale
+    return np.asarray(d.detach().float().cpu().numpy() if hasattr(d, "detach") else d, np.float32).reshape(-1)
+
+
+def add_decoders(pack: dict[str, Any], sae: Any) -> dict[str, Any]:
+    """Each named feature's decoder direction, from the SAE its features came from: what the panel's "why this move"
+    row needs. A feature's push on the move the policy leans to is its activation x this direction x the gradient of
+    that move's log-probability at the layer (attribution patching). Packs made by ``make_pack`` / ``Study.make_pack``
+    have them already; this adds them to an older pack. Checks that the SAE is the features' own (their encoder rows
+    must match)."""
+    feats = pack.get("features") or []
+    if not feats:
+        raise CDSInterpretError("add_decoders: the pack has no named features, so there is nothing to add")
+    for f in feats:
+        j = int(f["index"])
+        if not 0 <= j < int(sae.m):
+            raise ShapeError(f"add_decoders: feature {f['name']!r} is number {j}, but this SAE has {sae.m} features: "
+                             "it isn't the dictionary the pack's features came from")
+        w = (sae.W_enc[:, j].detach().float().cpu().numpy() / float(sae.scale)).astype(np.float32)
+        if w.shape != np.shape(f["w"]) or not np.allclose(w, f["w"], rtol=1e-4, atol=1e-6):
+            raise CDSInterpretError(f"add_decoders: feature {f['name']!r} (number {j}) reads the layer differently in "
+                                    "this SAE: it isn't the dictionary the pack's features came from. Pass that one "
+                                    "(FeatureSet.save / Study.load_features keep it).")
+        f["d"] = _direction(sae, j)
+    pack["version"] = VERSION
+    return pack
+
+
+def _kickoff_rows(fr: Frames) -> np.ndarray:
+    """[N] True where the ball sits still on the centre spot (a kickoff)."""
+    pos, vel = np.asarray(fr.ball_pos, np.float64), np.asarray(fr.ball_vel, np.float64)
+    return (np.abs(pos[:, 0]) < 1.0) & (np.abs(pos[:, 1]) < 1.0) & (np.linalg.norm(vel, axis=1) < 1.0)
+
+
+def add_donors(pack: dict[str, Any], moments: Any, me: Any = None, n: int = 32, seed: int = 0,
+               skip_kickoffs: bool = True) -> dict[str, Any]:
+    """Real recorded moments for the panel's "looking at" row. While the bot plays, each part of the live moment -
+    the bot's own car, the ball, the opponents, the team-mates - is swapped for the same part of one of these moments,
+    and the move's probability over every combination says how much the move rests on each part.
+
+    moments: a Moments (its frames and the car each moment was seen by), a list of them (one per mode: 1v1, 2v2,
+    3v3), or Frames with ``me`` [N]. Up to ``n`` moments are kept per number of cars (kickoffs, and moments whose own
+    car is demolished, left out), replacing any the pack had for that number of cars. Only the game state is kept
+    (positions, speeds, boost, the cars' last controls when recorded) - a few kilobytes, and nothing of your network:
+    your bot's input is rebuilt from them with its own obs function, in the overlay's worker
+    (``with_thoughts(..., policy=...)``)."""
+    if isinstance(moments, (list, tuple)):
+        for m in moments:
+            add_donors(pack, m, None, n, seed, skip_kickoffs)
+        return pack
+    fr = moments if isinstance(moments, Frames) else getattr(moments, "frames", None)
+    if not isinstance(fr, Frames):
+        raise CDSInterpretError(f"add_donors: give a Moments, a list of them, or Frames with me=, not "
+                                f"{type(moments).__name__}")
+    me = getattr(moments, "me", None) if me is None else me
+    if me is None:
+        raise CDSInterpretError("add_donors: with Frames, say which car each moment is seen by: me=[N] car slots")
+    me = np.broadcast_to(np.asarray(me, np.int64), (len(fr),))
+    rows = np.arange(len(fr))
+    keep = np.ones(len(fr), bool)
+    if skip_kickoffs:
+        keep &= ~_kickoff_rows(fr)
+    keep &= np.asarray(fr.car_demoed, np.float64)[rows, me] < 0.5
+    keep &= np.asarray(fr.car_present, np.float64)[rows, me] > 0.5
+    cand = rows[keep]
+    if not len(cand):
+        raise CDSInterpretError("add_donors: no usable moments (every one is a kickoff, or its own car is demolished)")
+    pick = np.sort(np.random.default_rng(seed).choice(cand, size=min(int(n), len(cand)), replace=False))
+    data = {k: np.asarray(fr.data[k][pick], np.float32) for k in DONOR_FIELDS if k in fr.data}
+    group = {"cars": int(fr.n_cars), "me": me[pick].astype(np.int64), "data": data}
+    donors = [g for g in pack.get("donors") or [] if int(g["cars"]) != group["cars"]]
+    pack["donors"] = sorted(donors + [group], key=lambda g: int(g["cars"]))
+    pack["version"] = VERSION
+    return pack
+
+
 # ---------------------------------------------------------------------------------------------------- files
 def save_pack(pack: dict[str, Any], path: str | os.PathLike[str]) -> str:
     """Write a pack as one .npz file (arrays and JSON text only)."""
     arrays: dict[str, np.ndarray] = {}
-    meta = {k: v for k, v in pack.items() if k not in ("features", "probes", "table", "outlook", "land")}
-    meta["features"] = [{k: v for k, v in f.items() if k != "w"} for f in pack["features"]]
+    meta = {k: v for k, v in pack.items() if k not in ("features", "probes", "table", "outlook", "land", "donors")}
+    meta["features"] = [{k: v for k, v in f.items() if k not in ("w", "d")} for f in pack["features"]]
     meta["probes"] = [{k: v for k, v in p.items() if k != "w"} for p in pack["probes"]]
     for i, f in enumerate(pack["features"]):
         arrays[f"feature_{i}"] = np.asarray(f["w"], np.float32)
+        if f.get("d") is not None:
+            arrays[f"decoder_{i}"] = np.asarray(f["d"], np.float32)
     for i, p in enumerate(pack["probes"]):
         arrays[f"probe_{i}"] = np.asarray(p["w"], np.float32)
     if pack.get("table") is not None:
@@ -148,6 +240,13 @@ def save_pack(pack: dict[str, Any], path: str | os.PathLike[str]) -> str:
         arrays["land_w"] = np.asarray(pack["land"]["w"], np.float32)
         arrays["land_b"] = np.asarray(pack["land"]["b"], np.float32)
         meta["land"] = {"module": pack["land"]["module"], "info": pack["land"].get("info", {})}
+    if pack.get("donors"):
+        meta["donors"] = []
+        for g, grp in enumerate(pack["donors"]):
+            arrays[f"donors{g}_me"] = np.asarray(grp["me"], np.int64)
+            for k, v in grp["data"].items():
+                arrays[f"donors{g}_{k}"] = np.asarray(v, np.float32)
+            meta["donors"].append({"cars": int(grp["cars"]), "n": int(len(grp["me"])), "fields": sorted(grp["data"])})
     arrays["meta_json"] = np.frombuffer(json.dumps(meta).encode("utf-8"), dtype=np.uint8)
     path = os.fspath(path)
     if not path.endswith(".npz"):
@@ -162,13 +261,17 @@ def load_pack(path: str | os.PathLike[str]) -> dict[str, Any]:
         meta = json.loads(bytes(z["meta_json"]).decode("utf-8"))
         if meta.get("format") != FORMAT:
             raise CDSInterpretError(f"{path} is not a cds-interpret thoughts pack")
-        pack = {k: v for k, v in meta.items() if k not in ("features", "probes", "outlook_b", "land")}
-        pack["features"] = [{**f, "w": z[f"feature_{i}"]} for i, f in enumerate(meta["features"])]
+        pack = {k: v for k, v in meta.items() if k not in ("features", "probes", "outlook_b", "land", "donors")}
+        pack["features"] = [{**f, "w": z[f"feature_{i}"], **({"d": z[f"decoder_{i}"]} if f"decoder_{i}" in z else {})}
+                            for i, f in enumerate(meta["features"])]
         pack["probes"] = [{**p, "w": z[f"probe_{i}"]} for i, p in enumerate(meta["probes"])]
         pack["table"] = z.get("table")
         pack["outlook"] = {"w": z["outlook_w"], "b": meta["outlook_b"]} if "outlook_w" in z else None
         pack["land"] = ({"module": meta["land"]["module"], "w": z["land_w"], "b": z["land_b"],
                          "info": meta["land"].get("info", {})} if "land_w" in z else None)
+        pack["donors"] = [{"cars": int(g["cars"]), "me": z[f"donors{i}_me"],
+                           "data": {k: z[f"donors{i}_{k}"] for k in g["fields"]}}
+                          for i, g in enumerate(meta.get("donors") or [])]
     return pack
 
 
@@ -191,10 +294,28 @@ class Thoughts:
         land = pack.get("land")
         self.land_module = None if land is None else land["module"]
         self.land = None if land is None else (np.asarray(land["w"], np.float32), np.asarray(land["b"], np.float32))
+        # "why this move": the named features' decoder directions [F, D] (None when the pack has none)
+        self.fd = (np.stack([np.asarray(f["d"], np.float32) for f in fs])
+                   if fs and all(f.get("d") is not None for f in fs) else None)
+        # "looking at": real recorded moments, one group per number of cars: [(Frames, me [n])]
+        self.donors: list[tuple[Frames, np.ndarray]] = []
+        for g in pack.get("donors") or []:
+            data = {k: np.asarray(v) for k, v in g["data"].items()}
+            if all(k in data for k in REQUIRED) and len(g["me"]):
+                self.donors.append((Frames(data), np.asarray(g["me"], np.int64)))
 
     @property
     def layer(self) -> str:
         return self.pack["layer"]
+
+    @property
+    def names(self) -> list[str]:
+        """The named features, in the pack's order."""
+        return [str(f["name"]) for f in self.pack["features"]]
+
+    def donor_cars(self) -> list[int]:
+        """The numbers of cars the pack has donor moments for (2 in 1v1, 4 in 2v2, 6 in 3v3)."""
+        return [fr.n_cars for fr, _ in self.donors]
 
     def land_xy(self, h: Any) -> list[float] | None:
         """The landing marker (x, y; the team's frame) from its layer's values, or None without one."""

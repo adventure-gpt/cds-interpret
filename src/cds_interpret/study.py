@@ -694,12 +694,15 @@ class Study:
     # ---- the overlay
     def make_pack(self, layer: str, features: dict[str, int] | None = None, probes: dict[str, Any] | None = None,
                   land_layer: str | None = None, title: str = "THOUGHTS", value_scale: float = 1.0,
-                  outlook: bool = True, output_layer: str = "", names: Any = None) -> dict[str, Any]:
+                  outlook: bool = True, output_layer: str = "", names: Any = None, decoders: bool = True,
+                  donors: int = 32) -> dict[str, Any]:
         """A thoughts pack for the live overlay from this study: named features of ``layer``'s SAE, probes of
         ``layer`` {display name: label or (label, look)}, the landing marker from ``land_layer`` (default: the
         layer whose land_x / land_y readout is steadiest among those that read it well), and an outlook probe
         (the ``outlook`` label) when the moments have it. names: a names file (or names.Names) whose confirmed
-        names become the pack's features, with their thresholds (added to ``features``)."""
+        names become the pack's features, with their thresholds (added to ``features``). decoders: keep the
+        features' decoder directions (the panel's "why this move"); donors: how many recorded moments to keep for
+        the panel's "looking at" (0: none)."""
         from .overlay import pack as OP
         self._check_layer(layer)
         if land_layer is not None:
@@ -756,7 +759,12 @@ class Study:
                 self.log("  (no outlook bar: there were no goals in the training games to learn it from)")
         pk = OP.make_pack(layer, fs.sae if fs else None, features, thresholds, named, self.policy.actions,
                           self.policy.output if self.policy.output != "controls" else "logits", output_layer, title,
-                          value_scale, outlook_probe)
+                          value_scale, outlook_probe, decoders=decoders)
+        if donors > 0:
+            try:
+                OP.add_donors(pk, self.moments, n=donors)
+            except CDSInterpretError as e:
+                self.log(f"  (no moments for 'looking at': {e})")
         moves = all(k in self.labels and np.nanstd(self.labels[k]) > 50.0 for k in ("land_x", "land_y"))
         if land_layer is None and moves:
             cands = [(self.steadiness(lay)["miss_med"], lay) for lay in pr.by_layer
