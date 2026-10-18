@@ -29,7 +29,7 @@ after that.
 ```bash
 python -m venv .venv
 .venv\Scripts\activate            # on macOS / Linux: source .venv/bin/activate
-pip install "cds-interpret[rlgym,rlbot] @ git+https://github.com/adventure-gpt/cds-interpret"
+pip install "cds-interpret[rlgym,rlbot]"
 cds-interpret demo
 ```
 
@@ -63,7 +63,7 @@ all): removing the "goal side" direction moves them about six times as much as r
 Open `cds-demo/report.html` in your browser. It shows what the bot knows, the ideas it uses, and moments from its games
 drawn from above.
 
-On Python 3.13, leave out `rlgym` (`pip install "cds-interpret[rlbot] @ git+..."`): RLGym doesn't support 3.13 yet,
+On Python 3.13, leave out `rlgym` (`pip install "cds-interpret[rlbot]"`): RLGym doesn't support 3.13 yet,
 so the demo uses random game moments instead of recorded games. Everything else works.
 
 ## Then on your own bot

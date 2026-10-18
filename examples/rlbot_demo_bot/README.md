@@ -5,7 +5,7 @@ on screen, and a recorder - each one flag away. It is also the template for addi
 
 1. Get this folder: `git clone https://github.com/adventure-gpt/cds-interpret` (a pip install doesn't include the
    examples). Then, in the Python that `python` runs (3.11 or 3.12; `rlgym` brings RocketSim and its collision meshes
-   for step 2): `pip install "cds-interpret[rlgym,rlbot] @ git+https://github.com/adventure-gpt/cds-interpret"`.
+   for step 2): `pip install "cds-interpret[rlgym,rlbot]"`.
 2. Optional: `python make_pack.py` - records the demo bot in RocketSim, studies it, and writes a fresh
    `thoughts.npz` and `report.html` here (5-10 minutes on a CPU). The folder already has a `thoughts.npz`.
 3. In RLBot v5, add `thoughts.bot.toml` as a bot, turn rendering on, and start a match.

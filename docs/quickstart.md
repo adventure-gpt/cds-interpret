@@ -11,7 +11,7 @@ You need Python 3.11 or newer. Make a fresh environment so nothing else gets in 
 python -m venv .venv
 .venv\Scripts\activate             # Windows
 source .venv/bin/activate          # macOS / Linux
-pip install "cds-interpret[rlgym,rlbot] @ git+https://github.com/adventure-gpt/cds-interpret"
+pip install "cds-interpret[rlgym,rlbot]"
 ```
 
 This pulls in PyTorch too, which is the biggest download. A CPU build is all the toolkit needs; if you already have

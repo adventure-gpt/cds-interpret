@@ -22,7 +22,7 @@ RLGym needs an older numpy that doesn't install on Python 3.13 or newer. Either 
 `rlgym` extra out:
 
 ```bash
-pip install "cds-interpret[rlbot] @ git+https://github.com/adventure-gpt/cds-interpret"
+pip install "cds-interpret[rlbot]"
 ```
 
 Everything works without it except the RLGym bridges. To record in RocketSim you then need its collision meshes
