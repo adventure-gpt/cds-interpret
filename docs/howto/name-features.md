@@ -109,6 +109,15 @@ Each suggestion is the fact the feature lines up with best:
 - **"x as likely when it fires"** - when feature 139 fires, a threat on goal is 2.8 times as likely as usual.
 - **correlation** - for facts that are numbers, from -1 to 1. Feature 163 grows with the distance to the ball, so
   it's suggested as "far from the ball".
+- **precision** (printed by newer versions, e.g. `precision 0.91 (base rate 9.9%)`) - how often the fact holds at the
+  moments the feature fires most strongly, against how often it holds at all.
+
+**Why precision matters.** Most features are off most of the time. Such a *sparse* feature can only rank the few
+moments where it fires, so its AUROC stays close to 0.5 even when it is a clean detector: in a run of the demo bot,
+one feature fired on 0.6% of moments, and when it did, a shot on target was 24 times as likely as usual - with an AUROC
+of only 0.57. The toolkit therefore judges a yes / no relation by whichever is stronger, the AUROC or the precision
+above the base rate, and counts a feature as a detector when its precision is at least 4 times the base rate (and
+at least 0.1) - or its AUROC is high.
 
 The list shows each different suggestion once before any repeats, so twelve features that all go with kickoffs don't
 crowd out everything else. When several features do share a suggestion, they're numbered ("kickoff #2") for you to
@@ -132,6 +141,32 @@ animated.
 
 Ask of each card: do these moments look like the name? Feature 139's moments should show the ball heading for your
 goal. If they show something else every time, that something else is the better name.
+
+### Name by the labels
+
+Suggestions go feature by feature. For a network you're meeting for the first time, the other way round is quicker:
+for each fact, the feature that detects it best, one name per feature, and only where it detects it clearly:
+
+```python
+report = []
+for s in ci.names.suggest_by_label(feats, report=report):
+    print(s)
+```
+
+```text
+feature   159  in the air                    (AUROC 0.97, 4.6x as likely when it fires, precision 0.91 (base rate 9.9%); fires on 20.7%)
+feature   219  kickoff                       (AUROC 0.90, 3.6x as likely when it fires, precision 0.43 (base rate 7.9%); fires on 25.2%)
+feature   139  threat on goal                (AUROC 0.84, 2.5x as likely when it fires, precision 0.21 (base rate 1.6%); fires on 32.9%)
+feature    11  about to score                (AUROC 0.64, 8.0x as likely when it fires, precision 0.24 (base rate 4.3%); fires on 3.7%)
+feature    52  shot on target                (AUROC 0.57, 24.2x as likely when it fires, precision 0.16 (base rate 2.7%); fires on 0.6%)
+feature   197  about to concede              (AUROC 0.63, 5.9x as likely when it fires, precision 0.17 (base rate 2.1%); fires on 5.0%)
+feature   428  on a wall                     (AUROC 0.66, 5.6x as likely when it fires, precision 0.29 (base rate 7.2%); fires on 6.2%)
+```
+
+(A later run of the demo bot than the one above, so a few numbers differ.) `report` lists every fact, kept or not,
+with its numbers: here "demo chance" was left out - its best feature reached a precision of 0.03, against a base rate
+of 0.005, short of 0.1. Pass `labels=[...]` to choose the facts and their order. These are suggestions like any other:
+write them to a names file and look at their moments before you confirm them.
 
 ## 4. Write the names down
 

@@ -17,7 +17,7 @@ N moments, C cars, D numbers per layer or input, A actions. Every function's own
 
 `cds_interpret.policy` - [how-to](howto/bring-your-own-policy.md)
 
-**`Policy(net, obs=None, forward=None, output="logits", actions=None, value=None, name="policy", device="cpu")`**
+**`Policy(net, obs=None, forward=None, output="logits", actions=None, value=None, name="policy", device="cpu", mirror=None)`**
 Your bot as the toolkit sees it.
 
 | member | |
@@ -28,6 +28,7 @@ Your bot as the toolkit sees it.
 | `controls(x, deterministic=True)` | [N, 8] controls, through the action table |
 | `value(x)` | the critic's values [N], or None without one |
 | `observe(frames, me)` | the network's input for moments seen by car slots `me` (needs `obs`) |
+| `mirrored(frames, me)` | [N] bool: the moments a bot that mirrors the field sees mirrored (`mirror=`; all False without) |
 | `layers(example)` | `list[LayerInfo]`: every module, its type and output shape on the example inputs |
 | `default_layers(example)` | the hidden layers after their nonlinearity |
 | `activations(x, layers, batch=4096)` | `{path: [N, D]}` |
@@ -35,6 +36,7 @@ Your bot as the toolkit sees it.
 | `discrete`, `actions`, `output`, `net`, `name` | |
 
 **`lookup_table() -> [90, 8]`** the common discrete action table (24 ground rows, 66 air rows).
+**`unmirror_controls(row)`** controls as a mirroring bot really sends them (steer, yaw, roll turned round).
 **`describe_action(row) -> str`** controls in words: "throttle, steer left, boost".
 **`eager_copy(scripted) -> nn.Module`** an eager copy of a TorchScript MLP (Sequential, Linear, LayerNorm, the usual
 activations, Softmax, Dropout, Identity) with the same weights.
@@ -121,7 +123,9 @@ inputs (or uses the recorded ones), computes missing labels, picks the layers an
 | `edits(layer, {name: edit})` | `{name: {"kl", "argmax_changed", "tv"}}` on the held-out moments |
 | `probe_edit(layer, label, factor=0.0)`, `feature_edit(layer, features, scale=0.0)` | edits (`features`: numbers or confirmed names) |
 | `steadiness(layer, labels=("land_x", "land_y"))` | `probes.readout_stability` of labels read together |
-| `make_pack(layer, features=None, probes=None, land_layer=None, title="THOUGHTS", value_scale=1.0, outlook=True, names=None, decoders=True, donors=32)` | a thoughts pack (`names`: a names file whose confirmed names become its features; `decoders` / `donors`: what the panel's "why this move" and "looking at" need) |
+| `make_pack(layer, features=None, probes=None, land_layer=None, title="THOUGHTS", value_scale=1.0, outlook=True, names=None, decoders=True, donors=32)` | a thoughts pack (`names`: a names file whose confirmed names become its features; `decoders` / `donors`: what the panel's "why this move" and "looking at" need; its probes remember their labels) |
+| `landing(layer=None, layers=None)` | the landing ring's readout (`probes.fit_landing`) on the layer that misses least on held-out games: `w`, `b`, `layer`, `lambda`, `frame`, `median_miss`, `p90_miss`, `median_jump`, `tried`; kept as `landing_results` |
+| `calibrate_pack(pack, min_gain=0.0)` | each yes / no gauge of a pack Platt-calibrated on half the held-out games, checked on the other half, applied where it helps: {name: {"ece_before", "ece_after", "applied"}} |
 | `suggest_names(layer, top=24)` | a suggested name for each top feature (`names.Suggestion`) |
 | `feature_gallery(layer, path="features.html", features=None, n=24, exclude_kickoffs=False)` | a page of each feature's strongest moments |
 | `check_feature(layer, feature, scales=(0.0, 3.0))` | `FeatureCheck`: the feature (a number or a confirmed name) turned off and up, and what changes |
@@ -138,7 +142,8 @@ inputs (or uses the recorded ones), computes missing labels, picks the layers an
 **`FeatureSet`**: `layer`, `sae`, `fvu`, `effect`, `freq`, `relations`, `activation(j)`, `sizes(j)` (`start`,
 `typical`, `highest`: how big it gets when it fires), `guess(j, top=3)`, `name(j)`, `index(number_or_name)`,
 `name_feature(j, name)`, `apply_names(names_file)`, `check_names(names)`, `fingerprint` (this exact dictionary's code),
-`save(path)`, `top(n=12)`, `detectors(min_auroc=0.8, min_lift=3.0, min_freq=0.002, top=8)`, `summary(top)`.
+`save(path)`, `top(n=12)`, `detectors(min_auroc=0.8, min_lift=3.0, min_freq=0.002, top=8, min_ap=0.1,
+min_ap_lift=4.0)` (precise or clean detectors: `analysis.detects`), `summary(top)`.
 
 **`FeatureCheck`**: `layer`, `feature`, `name`, `n` (the moments it fires on), `results[scale]` (`kl`, `changed`,
 `shifts` {control: mean change}, `top_shifts`), `summary()`.
@@ -166,6 +171,7 @@ inputs (or uses the recorded ones), computes missing labels, picks the layers an
 | `probe_layer(x, labels, kinds, train, test, ...)` | one fit a label (logistic for yes / no) |
 | `fit_probe(x, y, kind, groups=None, scale="global")` | one `LinearProbe` |
 | `readout_stability(w, b, x, rows=None, y=None, seq=None, order=None, noise_sd=0.02)` | wnorm, noise, noise_rel, jitter, jitter_label, jitter_err, miss_med, miss_p90 |
+| `fit_landing(x, xy, train, test, groups, seq=None, order=None, mirrored=None)` | a place readout for the panel, its penalty chosen by the median miss on validation games: `w` [D, 2], `b`, `lambda`, `frame`, `median_miss`, `p90_miss`, `median_jump`, `tried` |
 | `LinearProbe(w, b, kind, lam, link)` | `score(x)`, `direction()`, `to_dict()`, `LinearProbe.from_dict(d)` |
 | `auroc`, `average_precision`, `r2`, `headline(result)` | metrics |
 
@@ -237,9 +243,12 @@ Edits: `replace_with(sae)`, `ablate_features(sae, features, scale=0.0)`, `clamp_
 
 `cds_interpret.analysis`
 
-`label_relations(act, labels, kinds)` (AUROC, base, P(label | on), lift, recall; or r), `sparse_relations(rows, vals,
-labels, kinds, n)` (the same, in time proportional to how often a feature fires), `sparse_columns(idx, val, m)`,
-`relation_strength(rel)`, `guess_name(rel, top=3)`, `top_moments(act, k=12, groups=None, steps=None, min_gap=8)`,
+`label_relations(act, labels, kinds)` (AUROC, base, P(label | on), lift, recall, ap; or r), `sparse_relations(rows,
+vals, labels, kinds, n)` (the same, in time proportional to how often a feature fires), `sparse_columns(idx, val, m)`,
+`sparse_ap(v_on, pos_on, n_pos, n)` (average precision with the off moments tied at the bottom),
+`relation_strength(rel)` (|2 AUROC - 1|, or the precision above the base rate when that is larger: a sparse feature's
+AUROC stays low even when it detects well), `detects(rel, min_auroc=0.8, min_lift=3.0, min_ap=0.1, min_ap_lift=4.0)`,
+`guess_name(rel, top=3)`, `top_moments(act, k=12, groups=None, steps=None, min_gap=8)`,
 `describe(frames, me, t)`, `causal_targets(features, label="demo_chance", ...)`.
 
 ## Habits
@@ -270,6 +279,7 @@ Each function's docstring gives its arguments and what it returns.
 | | |
 |---|---|
 | `suggest(feature_set, features=None, labels=None, top=24)` | `list[Suggestion]`: a name per feature (`feature`, `name`, `label`, `strength`, `detail`, `freq`, `warnings`, `sizes`, `dictionary`); by default each different name once before any repeats |
+| `suggest_by_label(feature_set, labels=None, min_ap=0.1, min_ap_lift=4.0, min_auroc=0.85, min_lift=3.0, report=None)` | the other way round: for each yes / no label the feature that detects it best (by precision), one name per feature, kept only when clear; `report` gets every label's numbers |
 | `write_names(path, suggestions, layer, overwrite=False)` | start a names file (every name "suggested", the dictionary's code, each feature's sizes as a comment) |
 | `update_names(path, suggestions, layer)` | add new features to a names file, keeping your edits |
 | `read_names(path)` | `Names`: `layer`, `dictionary`, `features` {index: `FeatureName(name, status, threshold, note)`}, `confirmed()`, `thresholds()` |
@@ -283,12 +293,13 @@ Each function's docstring gives its arguments and what it returns.
 | | |
 |---|---|
 | `make_pack(layer, sae=None, features=None, thresholds=None, probes=None, actions=None, output="logits", output_layer="", title="THOUGHTS", value_scale=1.0, outlook_probe=None, meta=None, decoders=True)` | a pack from parts you made yourself (`probes`: {name: (LinearProbe, look)}; `decoders`: keep each named feature's decoder direction). `Study.make_pack` makes one from a study, with `probes` as {name: label} |
-| `add_land(pack, module, w [D, 2], b [2])` | the landing marker from its own layer |
+| `add_land(pack, module, w [D, 2], b [2], info=None, frame="team")` | the landing marker from its own layer (`frame="mirrored"`: fitted in a mirroring bot's own frame) |
 | `add_decoders(pack, sae)` | the named features' decoder directions, for "why this move" (refuses an SAE the features didn't come from) |
 | `add_donors(pack, moments, me=None, n=32, seed=0, skip_kickoffs=True)` | up to `n` real recorded moments per number of cars (a Moments, a list of them, or Frames with `me`), for "looking at" |
 | `save_pack(pack, path)`, `load_pack(path)` | `.npz`, no pickles (format version 2; version 1 packs load) |
 | `Thoughts(pack)` | `read(h, output)` (h: the pack layer's values), `land_xy(h_land)` (the values of the layer named in `pack["land"]["module"]`, which may be another layer), `outlook_value(h)`, `names`, `fd` [F, D] decoder directions (or None), `donors` [(Frames, me)], `donor_cars()` |
-| `with_thoughts(BotClass, pack, network=None, panel=None, hooks=None, input_layer="", critic=None, worker=True, title=None, draw_every=None, x=None, y=None, policy=None)` | your RLBot v5 bot class (a Bot or a Hivemind) with the overlay. `policy`: `"module:factory"` returning your `ci.Policy`, built in the worker, for "why this move" and "looking at" (a Policy object with `worker=False`) |
+| `with_thoughts(BotClass, pack, network=None, panel=None, hooks=None, input_layer="", critic=None, worker=True, title=None, draw_every=None, x=None, y=None, policy=None, error_log=None)` | your RLBot v5 bot class (a Bot or a Hivemind) with the overlay. `policy`: `"module:factory"` returning your `ci.Policy`, built in the worker, for "why this move" and "looking at" (a Policy object with `worker=False`); `error_log`: a file for its errors |
+| `watch_thoughts(policy, pack, cars, panel=None, hooks=None, title=None, team_sizes=None, error_log=None)` | an RLBot v5 Script class drawing the thoughts of a bot you can't modify: `cars` a piece of its name, player indices or a function of the packet (`match_cars`); `cds-interpret watch-template` writes one ([how-to](howto/watch-a-bot.md)) |
 | `Explainer(thoughts, policy, seed=0, freeze=True)` | the two decision readings: `why(x, h, action, acts=None)` -> [{"name", "push"}], `looking(state, me, action, donors=3)` -> {part: share}; `available`, `notes` |
 | `load_policy(spec)`, `try_readings(pack, policy, donors=3)` | a Policy from `"module:factory"`; both readings tried on the pack's own moments: {"why_ms", "looking_ms", "problems"} |
 | `Follow(rules=("camera", "last", "random"), seed=0)` | team modes: `pick(ours, spectated)` -> (player index or None, rule), `update(ours, spectated)` every packet |
@@ -314,6 +325,17 @@ functions. `cds_interpret.overlay.team`: `check_follow`, `check_landing_for`, `c
 | `RowDrawer` | what a custom row hook draws with: `line()`, `bar()`, `stacked()`, `spans()`, `blank()`, `gap()`, `color()`, `named()` |
 | `check_panel(config, pack)` | what in a config doesn't match a pack (rows, styles and lists naming probes or features it doesn't have; why / looking rows of your own without what they need), in words; `[]` when all is well |
 | `WorkerLink(target, *args)`, `compute(thoughts, msg, critic=None, explainer=None)` | the worker process (`hello`: its ready message, with what it can compute) and what it computes |
+
+## Keeping a pack across checkpoints
+
+`cds_interpret.refit` - [how-to](howto/keep-your-panel.md)
+
+| | |
+|---|---|
+| `carry_names(old_pack, old_values [N, D], new_features, min_r=0.5)` | each named feature found again in a new dictionary by what it fires on: [{"name", "old", "new", "r", "runner_up", "r2", "kept"}] |
+| `describe_carry(report)`, `write_carried_names(path, report, new_features)` | the matching in words; a names file for the new dictionary |
+| `feature_activations(pack, h)` | the pack's named features' activations [N, F] on a layer's values |
+| `refit_pack(old_pack, policy, old_policy, out, moments=None, games=24, seconds=90, team_size=1, opponent="chaser", layer=None, m=None, k=None, steps=2000, min_r=0.5, probes=None, donors=32, calibrate=True)` | every step for a newer checkpoint into `out` (resumable): recording, dictionary, names, pack, calibration; `cds-interpret refit-pack` |
 
 ## The study page and figures
 
@@ -345,4 +367,7 @@ module or raises `MissingDependency`.
 `cds-interpret doctor`, `cds-interpret panel [panel.toml] [--force]` (writes an example panel config),
 `cds-interpret check-panel panel.toml [thoughts.npz] [--policy module:factory]` (checks a panel config, against a
 pack, and with `--policy` tries "why this move" and "looking at" and times them),
+`cds-interpret watch-template [folder] [--force]` (a display-only script for a bot you can't modify),
+`cds-interpret refit-pack old.npz --policy NEW --old-policy OLD --out DIR [--moments DIR] [--games 24] [--seconds 90]
+[--team-size 1] [--opponent chaser] [--min-r 0.5]` (a pack carried over to a newer checkpoint),
 `cds-interpret --version`; also `python -m cds_interpret`.

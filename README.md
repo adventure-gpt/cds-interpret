@@ -109,6 +109,11 @@ network saw. The [quickstart](docs/quickstart.md) walks through both ways, step 
   opponents, the team-mates. [Why this move, and what it's looking at](docs/howto/why-and-looking.md).
 - **2v2 and 3v3 too.** Every car gets its own landing ring, and the panel follows the car you watch with the
   spectator camera - or a fixed car, or one picked for the match. [Team modes](docs/howto/team-modes.md).
+- **Watch a bot you can't modify.** A small RLBot script draws the same panel over a bot that runs on its own - a
+  compiled bot, one in another language - from its weights and a port of its observation.
+  [Thoughts for a bot you can't modify](docs/howto/watch-a-bot.md).
+- **Keep your panel as your bot trains.** One command carries a pack's names over to a newer checkpoint, by what the
+  features fire on, and refits the rest. [Keep your panel](docs/howto/keep-your-panel.md).
 - **Design your own panel.** Pick the rows, names, colours, size and position in a small TOML file, or draw your own
   rows in Python. [Customize the panel](docs/howto/customize-the-panel.md).
 - **Record games three ways.** In RocketSim against itself or a scripted opponent, in the real game through RLBot, or
@@ -143,6 +148,8 @@ network saw. The [quickstart](docs/quickstart.md) walks through both ways, step 
 | [Watch it think in RLBot](docs/howto/overlay.md) | the live thoughts overlay |
 | [Why this move, and what it's looking at](docs/howto/why-and-looking.md) | the panel's two rows about each decision: how to read them, what they cost |
 | [Team modes](docs/howto/team-modes.md) | 2v2 and 3v3: a ring for every car, a panel that follows the camera |
+| [Thoughts for a bot you can't modify](docs/howto/watch-a-bot.md) | a display-only script over a bot that runs on its own |
+| [Keep your panel when your bot trains on](docs/howto/keep-your-panel.md) | a pack carried over to a newer checkpoint, in one command |
 | [Customize the panel](docs/howto/customize-the-panel.md) | every option of the panel's TOML file, and Python hooks |
 | [Reports and drawings](docs/howto/figures.md) | the HTML page, its sections, the drawings |
 | [See what it learns between checkpoints](docs/howto/track-training.md) | checkpoint after checkpoint, and what to practise next |

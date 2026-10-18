@@ -19,6 +19,8 @@ New here? Start with the **[quickstart](quickstart.md)**: five minutes on the bu
 - [Watch it think in RLBot](howto/overlay.md) - the live thoughts overlay
 - [Why this move, and what it's looking at](howto/why-and-looking.md) - the panel's two rows about each decision
 - [Team modes](howto/team-modes.md) - 2v2 and 3v3: a landing ring for every car, a panel that follows the camera
+- [Thoughts for a bot you can't modify](howto/watch-a-bot.md) - a display-only script over a bot that runs on its own
+- [Keep your panel when your bot trains on](howto/keep-your-panel.md) - a pack carried over to a newer checkpoint
 - [Design your own panel](howto/customize-the-panel.md) - every option of the panel's file, and Python hooks
 - [Reports and drawings](howto/figures.md) - the study page, its sections, the drawings, habit counts
 - [See what your bot learns between checkpoints](howto/track-training.md) - what each checkpoint picked up, and what

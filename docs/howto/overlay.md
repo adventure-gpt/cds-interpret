@@ -102,6 +102,7 @@ Other options:
 | `input_layer="actor"` | the module whose input is your observation, when your bot doesn't call the network itself on it (read for `critic=` and `policy=`) |
 | `title=`, `x=`, `y=`, `draw_every=` | quick overrides of the panel's title, position and drawing rate |
 | `worker=False` | do the reading in your bot's process after the controls are sent (for debugging only) |
+| `error_log="overlay_errors.log"` | also write the overlay's errors, with where they happened, to this file |
 
 In 2v2 and 3v3 every car of your bot gets its own landing ring, and the panel shows the car you follow with the
 spectator camera - a `Hivemind` bot or one copy of your bot per car alike. [Team modes](team-modes.md) explains the
@@ -135,12 +136,21 @@ the same.
    helper builds its own copy of your network for "why this move" and "looking at"; your bot's is never touched.
 4. **It never makes your bot wait.** Nothing is sent to the helper until it says it's ready, a separate thread does the
    sending, and nothing is drawn on the same tick as a decision.
-5. **Mistakes switch it off, not your bot.** Any error in the overlay is written to the log once and the overlay stops.
-   Your bot keeps playing.
+5. **One bad moment doesn't stop it - or freeze it.** An error in one frame is written to your bot's log (the first
+   few, then every 200th, each with where it happened) and the overlay carries on with the next frame. Packets without a
+   ball, during the replay after a goal, are skipped. Only a long run of failures in a row - about five seconds -
+   switches the overlay off, and then it takes its drawing off the screen, so a panel never sits frozen. A helper
+   process that stops is started again. Your bot keeps playing whatever happens. `error_log="overlay_errors.log"`
+   also writes the errors to a file.
 
 ## When the panel doesn't show
 
 **Nothing at all.** Turn on rendering in RLBot's match settings. Then give it a second or two after kickoff.
+
+**The bot's log says `cds-interpret: thoughts overlay: frame ... failed (...)`.** One frame went wrong and the
+overlay carried on; the message says what and where. If it keeps happening, the same message comes every 200th time
+(pass `error_log=` to collect them in a file), and after about five seconds of nothing but failures the overlay
+switches itself off and clears the screen.
 
 **The bot's log says `cds-interpret: thoughts overlay off (...)`.** The reason is in the brackets. The common ones:
 

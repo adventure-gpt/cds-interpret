@@ -115,6 +115,19 @@ table but not identical: RLGym's also holds the handbrake on directional jumps. 
 different table - even one row different - pass yours (for RLGym's: `LookupTableAction.make_lookup_table()`). The toolkit needs the table to play your bot in RocketSim and to say its actions in words
 ("throttle, steer left, boost").
 
+### A bot that sees the field mirrored
+
+Some bots turn the field round in their observation at some moments (one side seen as the other), and turn steer,
+yaw and roll round again before sending them. Tell the toolkit when, with `mirror=` - a function of the game state
+like the input function, returning True for each moment the bot sees mirrored:
+
+```python
+policy = ci.Policy(net, obs=my_obs, actions=MY_ACTIONS, mirror=lambda frames, me: my_mirror_flag(frames, me))
+```
+
+It then says the bot's moves the way they're really sent, and fits the live landing ring in the bot's own frame and
+turns it back for drawing. See [a bot that sees the field mirrored](probes.md#a-bot-that-sees-the-field-mirrored).
+
 ## Networks with more than one part
 
 If your network is an actor and a critic together, tell the toolkit which part picks the actions:

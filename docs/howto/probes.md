@@ -122,7 +122,44 @@ for layer in study.layers:
     print(layer, round(s["miss_med"]), "uu typical miss", round(s["jitter"]), "uu moved per moment")
 ```
 
-`study.make_pack` does this for you and puts the landing ring on the steadiest layer.
+`study.make_pack` does this for you. Its landing ring comes from `study.landing()`, which tries each studied layer
+and fits the readout for what you see on screen: the penalty is the one that makes the ring **miss least** - the
+median distance from where the ball really lands - on games held out of the fit, not the best score of x and y
+apart. It reports the typical miss, the miss nine times out of ten, and how far the ring moves between readings:
+
+```python
+fit = study.landing()        # also fit["layer"], fit["median_miss"], fit["p90_miss"], fit["median_jump"], fit["tried"]
+```
+
+```text
+  landing ring: body.1 misses by 500 uu typically (90% within 1437), moves 217 uu between readings
+```
+
+(That's the demo bot. For comparison, the ball is 186 uu across, and the ring is drawn 300 uu wide.)
+
+### A bot that sees the field mirrored
+
+Some bots see the field mirrored left to right at some moments - their observation turns one side into the other, so
+one network learns both sides at once. Such a network can't tell the two sides apart, so a readout of where the ball
+lands, fitted as usual, is wrong half the time: it can only say "on my near side", not "on the left".
+
+Tell the toolkit when the bot mirrors, with a function of the game state:
+
+```python
+def mirrored(frames, me):
+    """True where the bot (car slot me[i]) sees moment i mirrored - here: when its car is on the left of its half."""
+    rows = np.arange(len(frames))
+    side = ci.frames.team_sign(frames.car_team[rows, me])
+    return frames.car_pos[rows, me, 0] * side < 0
+
+policy = ci.Policy(net, obs=my_obs, actions=MY_ACTIONS, mirror=mirrored)
+```
+
+Then `study.landing()` fits the readout in the bot's own frame (x turned round on the mirrored moments), the pack
+remembers it (`frame = "mirrored"`), and the overlay turns each reading back with the same function before drawing -
+so the overlay needs the policy too (`with_thoughts(..., policy=...)`, or the [watch script](watch-a-bot.md)). Without
+it, the rings stay hidden rather than drawn on the wrong side. The words of a move are turned round as well: such a
+bot's "steer right" in its own frame is a "steer left" on the real field.
 
 **4. Smooth what you draw.** Even a good readout wavers a little. The panel smooths its numbers and glides the landing
 ring over about a quarter of a second; the [panel file](customize-the-panel.md) lets you change both.

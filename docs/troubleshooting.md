@@ -193,6 +193,16 @@ The overlay switched itself off; your bot is still playing. The reason is in the
   file. The example file already has every table; add your lines to the one that's there (remove the `#` in front of
   a commented-out line to use it).
 
+**The panel froze on screen.**
+Since 0.2 it shouldn't: an error in one frame is logged and the next frame draws again, packets without a ball (the
+replay after a goal) are skipped, and if the overlay ever gives up it takes its drawing down. Look in the bot's log for
+`frame ... failed`, or pass `error_log="overlay_errors.log"` to `with_thoughts` (or `watch_thoughts`) to keep the
+errors in a file.
+
+**The landing rings sit on the wrong side half the time.**
+The bot sees the field mirrored at some moments. Give its policy a `mirror=` function and refit the ring
+([a bot that sees the field mirrored](howto/probes.md#a-bot-that-sees-the-field-mirrored)).
+
 **A row or a feature style of my panel file doesn't show.**
 Its name doesn't match the pack exactly - names are case-sensitive, and a probe is called by the name you gave it in
 `make_pack`. `cds-interpret check-panel panel.toml thoughts.npz` lists every mismatch with what you probably meant;

@@ -126,6 +126,11 @@ happens: 0.08 here means about 8 percentage points.
 On a large self-play bot's panel, a "they score within 3 s" gauge in its top 1% showed 64% for something that happened
 92% of the time. After Platt scaling it showed 98%, and the calibration error was three times smaller.
 
+All of a pack's yes / no gauges at once: `study.calibrate_pack(pack)` fits each on half of the study's held-out
+games, checks it on the other half, and keeps the correction only where the calibration error went down (it prints
+both numbers). The held-out games are the study's own, so calibrate on recordings of the mode the panel will show -
+a recording of 2v2 games only is calibrated on 2v2.
+
 Two more: `RO.smoothing_tradeoff` measures what smoothing a gauge costs (lag, accuracy) against what it buys (less
 jitter), and `RO.hysteresis` / `RO.switches_per_minute` do the same for features flicking on and off.
 

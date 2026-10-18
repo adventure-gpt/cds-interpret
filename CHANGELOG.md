@@ -5,7 +5,8 @@ All notable changes to cds-interpret are written down here. The project follows
 
 ## [0.2.0] - unreleased
 
-The live overlay in 2v2 and 3v3, and two new rows that say why the bot makes each move.
+The live overlay in 2v2 and 3v3, two new rows that say why the bot makes each move, a panel that keeps going through
+bad frames, thoughts for bots you can't modify, and packs carried over to newer checkpoints.
 
 ### Added
 
@@ -44,9 +45,43 @@ The live overlay in 2v2 and 3v3, and two new rows that say why the bot makes eac
   `RowDrawer.blank` (room kept empty) for custom rows.
 - Pictures of the new panel, of a team-mode panel and of a 3v3 moment from above with every car's ring, drawn by the
   overlay's own code (`scripts/render_panel.py`).
+- **Thoughts for a bot you can't modify** ([guide](docs/howto/watch-a-bot.md)): `overlay.watch_thoughts(policy,
+  pack, cars=...)`, a display-only RLBot v5 script that rebuilds a bot's input from each packet with your obs
+  function, runs its network (weights in memory, nothing written) and draws the same panel and rings over the cars it
+  matches (a piece of their name, player indices or a function), with every panel option, `team_sizes=` for a pack
+  made for one brain of a bot, and only the rows it can compute. `cds-interpret watch-template` writes a ready
+  script and its `script.toml`; `examples/watch_a_bot` watches the demo bot this way.
+- **Keep your panel when your bot trains on** ([guide](docs/howto/keep-your-panel.md)): `refit.carry_names` finds
+  each named feature again in a new checkpoint's dictionary by what it fires on (correlation over the same moments,
+  the runner-up reported, below `min_r` left out), `refit.write_carried_names` writes the new names file, and
+  `refit.refit_pack` / `cds-interpret refit-pack` does every step - recording, dictionary, names, probes on their
+  labels, the landing ring, calibration, decoder directions and recorded moments - resumably, into one folder.
+- **Naming by labels** (`names.suggest_by_label`): for each yes / no label the feature that detects it best, one name
+  per feature - the quick way to name a new network.
+- **The landing ring, fitted for the screen** (`probes.fit_landing`, `Study.landing`): its ridge penalty chosen on
+  validation games by the median miss, with the miss nine times in ten and the move between readings reported; the
+  layer with the smallest miss is used by `make_pack`.
+- **Bots that see the field mirrored** (`Policy(mirror=...)`, `Policy.mirrored`): the landing readout is fitted in
+  the bot's own frame and turned back for drawing (`add_land(frame="mirrored")`; without the policy the rings stay
+  hidden rather than drawn on the wrong side), and its moves are said as sent (`policy.unmirror_controls`).
+- **`Study.calibrate_pack(pack)`**: every yes / no gauge of a pack calibrated on half the held-out games, checked on
+  the other half, kept only where it helped.
 
 ### Changed
 
+- **The overlay keeps going through bad frames** instead of switching off at the first error (a panel left frozen on
+  screen): an error is logged with its traceback (the first few, then every 200th and any new kind;
+  `with_thoughts(..., error_log=...)` copies them to a file) and the next frame draws again; packets without a ball
+  (the goal replay) are skipped; only about five seconds of failures in a row, or a worker failing 50 readings in a
+  row, switch it off - and then it takes its drawing down. A worker process that stops is started again (three times
+  at most).
+- **Precision for sparse features**: relations to yes / no labels carry the average precision (`ap`, the moments where
+  a feature is off tied at the bottom), and a relation's strength is the larger of |2 AUROC - 1| and the precision
+  above the base rate - a sparse feature's AUROC stays near 0.5 even when it detects its label well (on the demo bot
+  one read AUROC 0.57 at 24 times its label's base rate). `FeatureSet.detectors` counts a feature whose precision is
+  at least max(0.1, 4 x the base rate), or whose AUROC is high; suggestions say the precision.
+- `Study.make_pack` fits the landing ring with `Study.landing` (it chose the layer by the probes' steadiness), and its
+  probes and meta remember their labels and the dictionary's size, for refits.
 - The default panel has two more rows, "Why this move" and "Looking at", between "Next move" and "Noticing". They take
   no room unless the overlay can compute them (a pack that has what they need and `policy=`), so without `policy=` the
   panel shows what it did - but, with `keep_size` on by default, rows keep room for their longest answer and the panel
