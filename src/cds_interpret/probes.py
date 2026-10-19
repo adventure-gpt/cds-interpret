@@ -504,7 +504,7 @@ LAMBDAS_LAND = (1e-5, 1e-4, 1e-3, 3e-3, 1e-2, 3e-2, 1e-1)   # times the layer's 
 
 def fit_landing(x: torch.Tensor, xy: np.ndarray, train: np.ndarray, test: np.ndarray, groups: np.ndarray,
                 seq: np.ndarray | None = None, order: np.ndarray | None = None, mirrored: np.ndarray | None = None,
-                lams=LAMBDAS_LAND, seed: int = 1) -> dict:
+                lams=LAMBDAS_LAND, seed: int = 1, car: tuple[np.ndarray, np.ndarray] | None = None) -> dict:
     """A place readout for the live panel - where the ball will land, (x, y) = h @ w + b - fitted for what shows on
     screen: the ridge penalty is the one with the smallest MEDIAN MISS (the distance from the true point) on
     validation games held out of the fit, not the best R2 of x and y apart.
@@ -514,7 +514,10 @@ def fit_landing(x: torch.Tensor, xy: np.ndarray, train: np.ndarray, test: np.nda
     games); seq / order (a per-row sequence key and time, as readout_stability): for the jump between readings.
     mirrored [N] bool (Policy.mirrored): for a bot that sees the field mirrored left to right at some moments - its
     layers can't tell the two sides apart, so the readout is fitted in ITS frame (x negated on those rows) and the
-    overlay turns it back with the same flag (frame "mirrored").
+    overlay turns it back with the same flag (frame "mirrored"). car (car_xy [N, 2], forward_xy [N, 2], in the frame of
+    xy): for a bot whose network sees the field from its own car (positions relative to it, turned with its heading) -
+    the readout is fitted RELATIVE TO THE CAR, (ahead, left) of it (overlay.car_frame_offsets), and the overlay puts it
+    back with the car's position and heading in each packet (frame "car"; the misses are the same distances).
 
     Returns {"w" [D, 2], "b" [2], "lambda", "frame", "median_miss", "p90_miss", "median_jump" (uu, on the test
     games: the jump is the median move between consecutive readings of one car), "label_jump" (the same for the
@@ -522,7 +525,15 @@ def fit_landing(x: torch.Tensor, xy: np.ndarray, train: np.ndarray, test: np.nda
     x = _tensor(x)
     y = np.asarray(xy, np.float64).reshape(len(x), 2).copy()
     frame = "team"
-    if mirrored is not None and np.asarray(mirrored).any():
+    if car is not None:
+        if mirrored is not None and np.asarray(mirrored).any():
+            raise CDSInterpretError("fit_landing: a car-frame readout has no mirrored rows (the car's own view has no "
+                                    "left and right to fold)")
+        from .overlay.pack import car_frame_offsets
+        car_xy, fwd = (np.asarray(a, np.float64).reshape(len(x), -1)[:, :2] for a in car)
+        y = car_frame_offsets(y, car_xy, fwd)
+        frame = "car"
+    elif mirrored is not None and np.asarray(mirrored).any():
         m = np.asarray(mirrored, bool).reshape(-1)
         y[m, 0] *= -1.0
         frame = "mirrored"

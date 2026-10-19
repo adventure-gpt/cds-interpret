@@ -489,22 +489,34 @@ class Study:
         ok = self.test[np.isfinite(y[self.test]).all(1)]
         return P.readout_stability(w, b, self.activations(layer), ok, y=y, seq=self.moments.seq, order=self.moments.step)
 
-    def landing(self, layer: str | None = None, layers: list[str] | None = None) -> dict[str, Any]:
+    def landing(self, layer: str | None = None, layers: list[str] | None = None, frame: str = "team") -> dict[str, Any]:
         """The landing readout for the live panel's ring (probes.fit_landing): a ridge readout of where the ball will
         land, its penalty chosen on validation games by the median miss. Without ``layer``, each of ``layers``
         (default: the study's) is tried and the one with the smallest validation miss is kept - often an early layer,
         which keeps places best. A bot with a mirror function (Policy(mirror=...)) gets its readout in its own
-        mirrored frame. Returns fit_landing's dict with "layer"; also kept as ``study.landing_results``."""
+        mirrored frame. frame="car": the readout is of the landing spot relative to the bot's own car, (ahead, left)
+        of it - for a network that sees the field from its car (positions relative to it, turned with its heading),
+        where a team-frame readout misses by thousands of uu. Returns fit_landing's dict with "layer"; also kept as
+        ``study.landing_results``."""
         from . import probes as P_
         if not all(k in self.labels for k in ("land_x", "land_y")):
             raise CDSInterpretError("these moments have no landing labels (land_x, land_y)")
         xy = np.stack([self.labels["land_x"], self.labels["land_y"]], 1)
-        mirrored = self.policy.mirrored(self.moments.frames, self.moments.me)
+        if frame not in ("team", "car"):
+            raise CDSInterpretError(f"landing: frame should be \"team\" (the team's frame, or the bot's mirrored one "
+                                    f"when its policy mirrors) or \"car\", not {frame!r}")
+        mirrored = self.policy.mirrored(self.moments.frames, self.moments.me) if frame == "team" else None
+        car = None
+        if frame == "car":                             # (the bot's car in the labels' team frame)
+            fr, me = self.moments.frames, self.moments.me
+            rows = np.arange(len(me))
+            sign = np.where(fr.car_team[rows, me] > 0.5, -1.0, 1.0)[:, None]
+            car = (fr.car_pos[rows, me, :2] * sign, fr.car_fwd[rows, me, :2] * sign)
         cands = [self._check_layer(layer)] if layer is not None else list(layers or self.layers)
         best: dict[str, Any] | None = None
         for lay in cands:
             fit = P_.fit_landing(self.activations(lay), xy, self.train, self.test, self.games, seq=self.moments.seq,
-                                 order=self.moments.step, mirrored=mirrored)
+                                 order=self.moments.step, mirrored=mirrored, car=car)
             fit["layer"] = lay
             fit["validation_miss"] = min(t["median_miss"] for t in fit["tried"])
             if best is None or fit["validation_miss"] < best["validation_miss"]:
@@ -513,8 +525,8 @@ class Study:
         self.landing_results = best
         jump = f", moves {best['median_jump']:.0f} uu between readings" if best.get("median_jump") is not None else ""
         self.log(f"  landing ring: {best['layer']} misses by {best['median_miss']:.0f} uu typically (90% within "
-                 f"{best['p90_miss']:.0f}){jump}" + (" - in the bot's own mirrored frame" if best["frame"] ==
-                                                     "mirrored" else ""))
+                 f"{best['p90_miss']:.0f}){jump}" + {"mirrored": " - in the bot's own mirrored frame",
+                                                     "car": " - relative to its car"}.get(best["frame"], ""))
         return best
 
     # ---- features
@@ -729,10 +741,11 @@ class Study:
     def make_pack(self, layer: str, features: dict[str, int] | None = None, probes: dict[str, Any] | None = None,
                   land_layer: str | None = None, title: str = "THOUGHTS", value_scale: float = 1.0,
                   outlook: bool = True, output_layer: str = "", names: Any = None, decoders: bool = True,
-                  donors: int = 32) -> dict[str, Any]:
+                  donors: int = 32, land_frame: str = "team") -> dict[str, Any]:
         """A thoughts pack for the live overlay from this study: named features of ``layer``'s SAE, probes of
         ``layer`` {display name: label or (label, look)}, the landing marker from ``land_layer`` (default: the
-        layer whose landing readout misses least on held-out games - ``landing()``), and an outlook probe
+        layer whose landing readout misses least on held-out games - ``landing()``; land_frame="car" for a network that
+        sees the field from its own car), and an outlook probe
         (the ``outlook`` label) when the moments have it. names: a names file (or names.Names) whose confirmed
         names become the pack's features, with their thresholds (added to ``features``). decoders: keep the
         features' decoder directions (the panel's "why this move"); donors: how many recorded moments to keep for
@@ -808,7 +821,7 @@ class Study:
         if not moves:
             self.log("  (no landing marker: the ball's landing point didn't vary enough in these games to learn it)")
         else:
-            fit = self.landing(land_layer)
+            fit = self.landing(land_layer, frame=land_frame)
             OP.add_land(pk, fit["layer"], fit["w"], fit["b"],
                         {k: fit.get(k) for k in ("lambda", "median_miss", "p90_miss", "median_jump", "label_jump")},
                         frame=fit["frame"])

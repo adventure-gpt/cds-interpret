@@ -29,7 +29,7 @@ cds-interpret doctor
 ```
 
 ```text
-cds-interpret 0.5.1 on Python 3.12.10 (Windows)
+cds-interpret 0.6.0 on Python 3.12.10 (Windows)
   torch      2.14.1+cpu
   numpy      1.26.4
   RocketSim  2.2.1

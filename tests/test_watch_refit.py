@@ -396,3 +396,59 @@ def test_watch_template(tmp_path, capsys):
     toml = tomllib.loads((tmp_path / "w" / "watch.script.toml").read_text(encoding="utf-8"))
     assert toml["settings"]["run_command"] == "python watch.py"
     compile((tmp_path / "w" / "watch.py").read_text(encoding="utf-8"), "watch.py", "exec")
+
+
+# -------------------------------------------------------------------------- a landing readout relative to the car
+def test_car_frame_offsets_round_trip_and_turn_with_the_car():
+    from cds_interpret.overlay import car_frame_offsets, car_frame_point, heading, land_point
+    rng = np.random.default_rng(3)
+    pts, car = rng.uniform(-4000, 4000, (50, 2)), rng.uniform(-4000, 4000, (50, 2))
+    yaw = rng.uniform(-np.pi, np.pi, 50)
+    off = car_frame_offsets(pts, car, heading(yaw))
+    assert np.allclose(car_frame_point(off, car, heading(yaw)), pts)
+    assert np.allclose(np.linalg.norm(off, axis=1), np.linalg.norm(pts - car, axis=1))
+    # a car at (100, 200) facing +x: a point 300 ahead and 50 to its left is at (400, 250)
+    assert np.allclose(car_frame_offsets([[400.0, 250.0]], [[100.0, 200.0]], [[1.0, 0.0]]), [[300.0, 50.0]])
+    # the same in the team frame (orange's turned half round) and the world's: the offsets do not change
+    assert np.allclose(car_frame_offsets(-pts, -car, -heading(yaw)), off)
+    phys = type("P", (), {})()
+    phys.location = type("L", (), {"x": 100.0, "y": 200.0, "z": 17.0})()
+    phys.rotation = type("R", (), {"pitch": 0.0, "yaw": np.pi / 2, "roll": 0.0})()
+    assert land_point("car", [300.0, 50.0], 1, phys) == pytest.approx((50.0, 500.0))   # (facing +y: left is -x)
+    assert land_point("car", [300.0, 50.0], 0, None) is None
+    assert land_point("team", [300.0, 50.0], 1) == pytest.approx((-300.0, -50.0))
+
+
+def test_a_car_frame_landing_readout_is_fitted_relative_to_the_car():
+    from cds_interpret.overlay import car_frame_offsets, heading
+    rng = np.random.default_rng(5)
+    n = 4000
+    car, yaw = rng.uniform(-3000, 3000, (n, 2)), rng.uniform(-np.pi, np.pi, n)
+    true_off = rng.uniform(-2000, 2000, (n, 2))
+    from cds_interpret.overlay import car_frame_point
+    land = car_frame_point(true_off, car, heading(yaw))
+    # a layer that holds the offset (as a car-centred network would), not the place on the field
+    h = np.concatenate([true_off / 1000.0, rng.normal(0, 1, (n, 6))], 1).astype(np.float32)
+    games = np.repeat(np.arange(40), n // 40)
+    train, test = np.nonzero(games < 32)[0], np.nonzero(games >= 32)[0]
+    fc = P.fit_landing(torch.from_numpy(h), land, train, test, games, car=(car, heading(yaw)))
+    ft = P.fit_landing(torch.from_numpy(h), land, train, test, games)
+    assert fc["frame"] == "car" and fc["median_miss"] < 5.0
+    assert ft["frame"] == "team" and ft["median_miss"] > 500.0
+    assert np.allclose(np.asarray(torch.from_numpy(h)[test].numpy() @ fc["w"] + fc["b"]),
+                       car_frame_offsets(land[test], car[test], heading(yaw[test])), atol=10.0)
+    pack = make_pack("body.3", None, None, None, None, ci.lookup_table())
+    add_land(pack, "body.1", fc["w"], fc["b"], frame="car")
+    assert Thoughts(load_pack(save_pack(pack, __import__("tempfile").mkdtemp() + "/c.npz"))).land_frame == "car"
+    with pytest.raises(ci.CDSInterpretError):
+        P.fit_landing(torch.from_numpy(h), land, train, test, games, car=(car, heading(yaw)),
+                      mirrored=np.ones(n, bool))
+
+
+def test_a_study_fits_its_landing_ring_relative_to_the_car_on_request(demo_study):
+    fit = demo_study.landing("body.1", frame="car")
+    assert fit["frame"] == "car" and fit["w"].shape == (64, 2) and fit["median_miss"] > 0
+    pk = demo_study.make_pack("body.3", probes={"Goal side": "goal_side"}, land_layer="body.1", land_frame="car")
+    assert pk["land"]["frame"] == "car"
+    with pytest.raises(ci.CDSInterpretError):
+        demo_study.landing("body.1", frame="sideways")

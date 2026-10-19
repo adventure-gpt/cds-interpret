@@ -37,7 +37,7 @@ from ..errors import CDSInterpretError, require
 from ..frames import Frames
 from ..hooks import LayerTap
 from .bot import STALE, _fresh, _rows
-from .pack import Thoughts, load_pack
+from .pack import Thoughts, land_point, load_pack
 from .panel import GROUP, Panel, PanelConfig, check_panel, smooth_point
 from .share import Neighbours
 from .team import Follow, landing_cars, match_seed, subtitle_text
@@ -241,8 +241,9 @@ def watch_thoughts(policy: Any, pack: str | os.PathLike[str], cars: Any, panel: 
                 xy = result[c].get("land_xy")
                 if xy is None:
                     continue
-                sgn = -1.0 if int(players[c].team) == 1 else 1.0        # the team's frame -> the world's
-                new = (sgn * xy[0], sgn * xy[1])
+                new = land_point(th.land_frame, xy, int(players[c].team), players[c].physics)   # (team or car frame)
+                if new is None:
+                    continue
                 prev = st["think"].get(c)
                 fresh = prev is None or frame - prev[1] > STALE * 120
                 pt = smooth_point(None if fresh else prev[0], new, dt, markers.landing_smooth)

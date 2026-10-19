@@ -126,6 +126,52 @@ def make_pack(layer: str, sae: Any = None, features: dict[str, int] | None = Non
     return pack
 
 
+LAND_FRAMES = ("team", "mirrored", "car")
+
+
+def heading(yaw: Any) -> np.ndarray:
+    """[..., 2] the unit heading on the floor of cars with these yaws (radians): (cos yaw, sin yaw)."""
+    yaw = np.asarray(yaw, np.float64)
+    return np.stack([np.cos(yaw), np.sin(yaw)], -1)
+
+
+def car_frame_offsets(points_xy: Any, car_xy: Any, forward_xy: Any) -> np.ndarray:
+    """[N, 2] (ahead, left) of points [N, 2] seen from cars at car_xy [N, 2] facing forward_xy [N, 2] (any length:
+    the floor part of the car's forward vector, or heading(yaw)) - the targets of a frame="car" landing readout. Any
+    frame of the field will do as long as points, positions and forwards share it (the team's frame or the world's):
+    the offsets are the same."""
+    p, c, f = (np.asarray(a, np.float64) for a in (points_xy, car_xy, forward_xy))
+    f = f / np.maximum(np.linalg.norm(f, axis=-1, keepdims=True), 1e-9)
+    d = p - c
+    left = np.stack([-f[..., 1], f[..., 0]], -1)
+    return np.stack([(d * f).sum(-1), (d * left).sum(-1)], -1)
+
+
+def car_frame_point(offset: Any, car_xy: Any, forward_xy: Any) -> np.ndarray:
+    """car_frame_offsets turned back: the point [..., 2] at (ahead, left) offset [..., 2] from the car."""
+    o, c, f = (np.asarray(a, np.float64) for a in (offset, car_xy, forward_xy))
+    f = f / np.maximum(np.linalg.norm(f, axis=-1, keepdims=True), 1e-9)
+    left = np.stack([-f[..., 1], f[..., 0]], -1)
+    return c + o[..., :1] * f + o[..., 1:2] * left
+
+
+def land_point(frame: str, xy: Any, team: int, physics: Any = None) -> tuple[float, float] | None:
+    """Where on the field (world x, y) to draw a landing reading xy of a car: "team" / "mirrored" readings (already
+    turned back from a mirrored view) are in the team's frame - orange's is the world turned half round; "car"
+    readings are (ahead, left) of the car whose RLBot physics (location, rotation) is given. None when it cannot
+    be placed (a "car" reading without the car)."""
+    if xy is None:
+        return None
+    if frame == "car":
+        if physics is None:
+            return None
+        loc, yaw = physics.location, float(physics.rotation.yaw)
+        pt = car_frame_point(np.asarray(xy, np.float64)[:2], [float(loc.x), float(loc.y)], heading(yaw))
+        return float(pt[0]), float(pt[1])
+    sgn = -1.0 if int(team) == 1 else 1.0
+    return sgn * float(xy[0]), sgn * float(xy[1])
+
+
 def add_land(pack: dict[str, Any], module: str, w: Any, b: Any, info: dict[str, Any] | None = None,
              frame: str = "team") -> dict[str, Any]:
     """The landing marker read from its own layer ``module``: (x, y) = h @ w + b with w [D, 2], b [2], in the
@@ -134,13 +180,17 @@ def add_land(pack: dict[str, Any], module: str, w: Any, b: Any, info: dict[str, 
     probes.readout_stability first (docs/howto/probes.md). While the bot plays, that layer is copied by one more
     read-only hook. info: anything to keep with it (how it was fitted, its held-out numbers). frame: "team", or
     "mirrored" for a readout fitted in the bot's own mirrored frame (Policy(mirror=...)): the overlay then turns it
-    back with the policy's mirror flag, and draws no ring without one."""
+    back with the policy's mirror flag, and draws no ring without one; or "car" for a readout of the landing spot
+    RELATIVE TO THE CAR - (ahead, left) in uu along its heading on the floor and 90 degrees to the left of it
+    (car_frame_offsets makes the targets) - for a bot whose network sees the field from its own car (positions
+    relative to it, turned with its heading), where a team-frame readout cannot be read off its layers; the overlay
+    puts it back on the field from the car's position and heading in each packet (land_point)."""
     w = np.asarray(w, np.float32)
     b = np.asarray(b, np.float32).reshape(-1)
     if w.ndim != 2 or w.shape[1] != 2 or b.shape != (2,):
         raise ShapeError(f"add_land: w must be [D, 2] and b [2], not {w.shape} and {b.shape}")
-    if frame not in ("team", "mirrored"):
-        raise CDSInterpretError(f"add_land: frame should be \"team\" or \"mirrored\", not {frame!r}")
+    if frame not in LAND_FRAMES:
+        raise CDSInterpretError(f"add_land: frame should be \"team\", \"mirrored\" or \"car\", not {frame!r}")
     pack["land"] = {"module": str(module), "w": w, "b": b, "info": dict(info or {}), "frame": frame}
     return pack
 
@@ -328,7 +378,7 @@ class Thoughts:
         self.outlook = None if ol is None else (np.asarray(ol["w"], np.float32), float(ol["b"]))
         land = pack.get("land")
         self.land_module = None if land is None else land["module"]
-        self.land_frame = "team" if land is None else str(land.get("frame", "team"))   # or "mirrored"
+        self.land_frame = "team" if land is None else str(land.get("frame", "team"))   # or "mirrored", "car"
         self.land = None if land is None else (np.asarray(land["w"], np.float32), np.asarray(land["b"], np.float32))
         # "why this move": the named features' decoder directions [F, D] (None when the pack has none)
         self.fd = (np.stack([np.asarray(f["d"], np.float32) for f in fs])
@@ -357,7 +407,8 @@ class Thoughts:
         return sorted({fr.n_cars for fr, _ in self.donors} | {c for c, _ in self.input_donors})
 
     def land_xy(self, h: Any) -> list[float] | None:
-        """The landing marker (x, y; the team's frame) from its layer's values, or None without one."""
+        """The landing marker from its layer's values - (x, y) in the team's frame, or (ahead, left) of the car for a
+        frame="car" readout (land_point puts either on the field) - or None without one."""
         if self.land is None:
             return None
         return [float(v) for v in np.asarray(h, np.float32).reshape(-1) @ self.land[0] + self.land[1]]

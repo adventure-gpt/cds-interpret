@@ -161,6 +161,30 @@ so the overlay needs the policy too (`with_thoughts(..., policy=...)`, or the [w
 it, the rings stay hidden rather than drawn on the wrong side. The words of a move are turned round as well: such a
 bot's "steer right" in its own frame is a "steer left" on the real field.
 
+### A bot that sees the field from its own car
+
+Some networks never see the field as a map: their observation puts every position relative to their own car and turns
+it with the car's heading (attention bots in the Necto family work this way). Their layers know "the ball comes down
+800 uu ahead of me, a little to the left", not "at (1200, -3000)" - so a readout of the landing spot on the field
+misses by thousands of uu, however long you fit it. Ask for it relative to the car instead:
+
+```python
+fit = study.landing(frame="car")                       # (ahead, left) of the car, in uu
+pack = study.make_pack("body.3", probes={...}, land_frame="car")
+```
+
+For one such bot (an attention network of the Necto family, 720,000 recorded moments) the ring read off the layer
+where it first takes in the ball missed by 3,375 uu typically in the team's frame, and by 495 uu relative to its car -
+as close as a map-seeing bot's. Try its early layers, as for any bot: a place is read best before the network has
+pooled everything into one vector. (The "moves ... between readings" number compares consecutive moments, which for a
+car-frame readout can be different cars of a team: read it with care in team modes.)
+
+The readout gives two numbers - how far ahead of the car the ball lands along its heading on the floor, and how far
+to its left - the pack remembers it (`frame = "car"`), and the overlay puts each reading back on the field from the
+car's position and heading in that packet. With your own arrays: `overlay.car_frame_offsets(points, car_xy,
+forward_xy)` makes the targets (any frame of the field, as long as all three share it) and `probes.fit_landing(...,
+car=(car_xy, forward_xy))` fits them; `overlay.land_point` is what the overlay uses to draw one.
+
 **4. Smooth what you draw.** Even a good readout wavers a little. The panel smooths its numbers and glides the landing
 ring over about a quarter of a second; the [panel file](customize-the-panel.md) lets you change both.
 

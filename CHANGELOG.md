@@ -3,6 +3,18 @@
 All notable changes to cds-interpret are written down here. The project follows
 [Semantic Versioning](https://semver.org); before 1.0, minor versions may change the API (each change is listed).
 
+## [0.6.0] - 2026-10-18
+
+### Added
+
+- **Landing rings for bots that see the field from their own car.** Some networks put every position relative to
+  their car and turn it with the car's heading; a readout of the landing spot on the field can't be read off their
+  layers (one such bot's missed by 3,375 uu; relative to its car, 495). Now `study.landing(frame="car")` (and `make_pack(..., land_frame="car")`)
+  fits it relative to the car - how far ahead along its heading and how far to its left - the pack remembers
+  `frame = "car"`, and the overlay (your bot's and the watch script's) puts each reading back on the field from the
+  car's position and heading in the packet. For your own arrays: `overlay.car_frame_offsets` / `car_frame_point`,
+  `probes.fit_landing(..., car=(car_xy, forward_xy))`, and `overlay.land_point`, the overlay's own placement.
+
 ## [0.5.1] - 2026-10-18
 
 ### Documentation

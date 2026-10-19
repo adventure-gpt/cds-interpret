@@ -2,7 +2,8 @@
 
 =================================  ==============================================================================
 make_pack / save_pack / load_pack  what to show from one layer: named SAE features, probes, the action table
-add_land                           a landing marker read from its own (often earlier) layer
+add_land                           a landing marker read from its own (often earlier) layer (team, mirrored or car frame)
+car_frame_offsets / land_point     the targets of a car-frame landing readout; a reading put back on the field
 add_decoders / add_donors          what "why this move" and "looking at" need (decoder directions, real moments)
 add_input_donors                   ... recorded network inputs, for a policy that splits its own input (codec)
 Thoughts                           reads a pack from a layer's values (pure numpy)
@@ -20,17 +21,30 @@ docs/howto/overlay.md.
 
 from .bot import with_thoughts
 from .explain import Explainer, load_policy, try_readings
-from .pack import Thoughts, add_decoders, add_donors, add_input_donors, add_land, load_pack, make_pack, save_pack
+from .pack import (
+                   Thoughts,
+                   add_decoders,
+                   add_donors,
+                   add_input_donors,
+                   add_land,
+                   car_frame_offsets,
+                   car_frame_point,
+                   heading,
+                   land_point,
+                   load_pack,
+                   make_pack,
+                   save_pack,
+)
 from .panel import (
-    FeatureStyle,
-    Markers,
-    Panel,
-    PanelConfig,
-    RowDrawer,
-    RowSpec,
-    check_panel,
-    draw_thoughts,
-    smooth_point,
+                   FeatureStyle,
+                   Markers,
+                   Panel,
+                   PanelConfig,
+                   RowDrawer,
+                   RowSpec,
+                   check_panel,
+                   draw_thoughts,
+                   smooth_point,
 )
 from .team import Follow, landing_cars
 from .watch import match_cars, watch_thoughts
@@ -51,9 +65,13 @@ __all__ = [
     "add_donors",
     "add_input_donors",
     "add_land",
+    "car_frame_offsets",
+    "car_frame_point",
     "check_panel",
     "compute",
     "draw_thoughts",
+    "heading",
+    "land_point",
     "landing_cars",
     "load_pack",
     "load_policy",

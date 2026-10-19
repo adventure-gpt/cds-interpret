@@ -124,8 +124,8 @@ inputs (or uses the recorded ones), computes missing labels, picks the layers an
 | `edits(layer, {name: edit})` | `{name: {"kl", "argmax_changed", "tv"}}` on the held-out moments |
 | `probe_edit(layer, label, factor=0.0)`, `feature_edit(layer, features, scale=0.0)` | edits (`features`: numbers or confirmed names) |
 | `steadiness(layer, labels=("land_x", "land_y"))` | `probes.readout_stability` of labels read together |
-| `make_pack(layer, features=None, probes=None, land_layer=None, title="THOUGHTS", value_scale=1.0, outlook=True, names=None, decoders=True, donors=32)` | a thoughts pack (`names`: a names file whose confirmed names become its features; `decoders` / `donors`: what the panel's "why this move" and "looking at" need; its probes remember their labels) |
-| `landing(layer=None, layers=None)` | the landing ring's readout (`probes.fit_landing`) on the layer that misses least on held-out games: `w`, `b`, `layer`, `lambda`, `frame`, `median_miss`, `p90_miss`, `median_jump`, `tried`; kept as `landing_results` |
+| `make_pack(layer, features=None, probes=None, land_layer=None, title="THOUGHTS", value_scale=1.0, outlook=True, names=None, decoders=True, donors=32, land_frame="team")` | a thoughts pack (`names`: a names file whose confirmed names become its features; `decoders` / `donors`: what the panel's "why this move" and "looking at" need; its probes remember their labels) |
+| `landing(layer=None, layers=None, frame="team")` | the landing ring's readout (`probes.fit_landing`) on the layer that misses least on held-out games: `w`, `b`, `layer`, `lambda`, `frame`, `median_miss`, `p90_miss`, `median_jump`, `tried`; kept as `landing_results`. `frame="car"`: relative to the bot's own car, (ahead, left) of it - for a network that sees the field from its car |
 | `calibrate_pack(pack, min_gain=0.0)` | each yes / no gauge of a pack Platt-calibrated on half the held-out games, checked on the other half, applied where it helps: {name: {"ece_before", "ece_after", "applied"}} |
 | `suggest_names(layer, top=24)` | a suggested name for each top feature (`names.Suggestion`) |
 | `feature_gallery(layer, path="features.html", features=None, n=24, exclude_kickoffs=False)` | a page of each feature's strongest moments |
@@ -172,7 +172,7 @@ min_ap_lift=4.0)` (precise or clean detectors: `analysis.detects`), `summary(top
 | `probe_layer(x, labels, kinds, train, test, ...)` | one fit a label (logistic for yes / no) |
 | `fit_probe(x, y, kind, groups=None, scale="global")` | one `LinearProbe` |
 | `readout_stability(w, b, x, rows=None, y=None, seq=None, order=None, noise_sd=0.02)` | wnorm, noise, noise_rel, jitter, jitter_label, jitter_err, miss_med, miss_p90 |
-| `fit_landing(x, xy, train, test, groups, seq=None, order=None, mirrored=None)` | a place readout for the panel, its penalty chosen by the median miss on validation games: `w` [D, 2], `b`, `lambda`, `frame`, `median_miss`, `p90_miss`, `median_jump`, `tried` |
+| `fit_landing(x, xy, train, test, groups, seq=None, order=None, mirrored=None, car=None)` | a place readout for the panel, its penalty chosen by the median miss on validation games: `w` [D, 2], `b`, `lambda`, `frame`, `median_miss`, `p90_miss`, `median_jump`, `tried`. `car=(car_xy, forward_xy)`: fitted relative to the car (frame `"car"`) |
 | `LinearProbe(w, b, kind, lam, link)` | `score(x)`, `direction()`, `to_dict()`, `LinearProbe.from_dict(d)` |
 | `auroc`, `average_precision`, `r2`, `headline(result)` | metrics |
 
@@ -294,7 +294,9 @@ Each function's docstring gives its arguments and what it returns.
 | | |
 |---|---|
 | `make_pack(layer, sae=None, features=None, thresholds=None, probes=None, actions=None, output="logits", output_layer="", title="THOUGHTS", value_scale=1.0, outlook_probe=None, meta=None, decoders=True)` | a pack from parts you made yourself (`probes`: {name: (LinearProbe, look)}; `decoders`: keep each named feature's decoder direction). `Study.make_pack` makes one from a study, with `probes` as {name: label} |
-| `add_land(pack, module, w [D, 2], b [2], info=None, frame="team")` | the landing marker from its own layer (`frame="mirrored"`: fitted in a mirroring bot's own frame) |
+| `add_land(pack, module, w [D, 2], b [2], info=None, frame="team")` | the landing marker from its own layer (`frame="mirrored"`: fitted in a mirroring bot's own frame; `frame="car"`: (ahead, left) of the car) |
+| `car_frame_offsets(points_xy, car_xy, forward_xy)` / `car_frame_point(offset, car_xy, forward_xy)` | a point as (ahead, left) of a car, and back - the targets of a `frame="car"` readout |
+| `heading(yaw)` / `land_point(frame, xy, team, physics=None)` | a car's unit heading on the floor; a landing reading put on the field (world x, y) for its frame |
 | `add_decoders(pack, sae)` | the named features' decoder directions, for "why this move" (refuses an SAE the features didn't come from) |
 | `add_donors(pack, moments, me=None, n=32, seed=0, skip_kickoffs=True)` | up to `n` real recorded moments per number of cars (a Moments, a list of them, or Frames with `me`), for "looking at" |
 | `add_input_donors(pack, {cars: inputs}, n=32, seed=0)` | recorded network inputs per number of cars, for "looking at" by the policy's own codec |

@@ -56,7 +56,7 @@ from .._rlbot import (
 )
 from ..errors import CDSInterpretError
 from ..hooks import LayerTap
-from .pack import Thoughts, load_pack
+from .pack import Thoughts, land_point, load_pack
 from .panel import GROUP, Panel, PanelConfig, check_panel, smooth_point
 from .share import Neighbours
 from .team import Follow, landing_cars, match_seed, subtitle_text
@@ -336,13 +336,16 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
         dt = (frame - st["drawn"]) / 120.0
         st["drawn"] = frame
         markers = pnl.config.markers
-        sgn = -1.0 if bot.team == 1 else 1.0            # readouts are in the team's frame
+        land_frame = bot._cds_th.land_frame if getattr(bot, "_cds_th", None) is not None else "team"
         marks = []
         for c in landing_cars(markers.landing_cars, ours, panel_car, spec):
             res_c = st["cars"].get(c)
             if res_c is None or res_c.get("land_xy") is None:
                 continue
-            new = (sgn * res_c["land_xy"][0], sgn * res_c["land_xy"][1])
+            phys = packet.players[c].physics if c < len(packet.players) else None
+            new = land_point(land_frame, res_c["land_xy"], int(bot.team), phys)   # (the team's frame or the car's)
+            if new is None:
+                continue
             prev = st["think"].get(c)
             fresh = prev is None or frame - prev[1] > STALE * 120
             pt = smooth_point(None if fresh else prev[0], new, dt, markers.landing_smooth)
