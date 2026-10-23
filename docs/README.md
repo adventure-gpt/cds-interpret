@@ -14,6 +14,8 @@ New here? Start with the **[quickstart](quickstart.md)**: five minutes on the bu
 - [Test what it relies on](howto/causal-tests.md) - switch ideas off and up, on moments and over whole games
 - [See what a decision rests on](howto/what-decisions-rest-on.md) - the ball, its car, the opponents; and what each
   feature makes the bot do
+- [What each attention head looks at](howto/attention-heads.md) - per-head attention maps by token name, how they
+  shift with the situation, and reading your own attention modules (fused kernels too)
 - [Check your tools](howto/check-your-tools.md) - dictionaries true to the bot's choices and found again, probes the
   bot really uses, gauges whose numbers mean what they say
 - [Watch it think in RLBot](howto/overlay.md) - the live thoughts overlay

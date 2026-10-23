@@ -19,6 +19,8 @@ dark following the reader's system. It shows what the study has computed so far:
 | How steady each readout is | each label's best probe: weight norm, noise sensitivity, jitter against the label's own |
 | Features | for each SAE: variance unexplained and the policy on the reconstruction; a card per top feature - its guessed (or given) name, how often it fires, what it goes with, its three strongest distinct moments drawn from above and described in words, and an animated clip of the strongest when the recording has tracks |
 | Edits | each edit's KL, share of changed actions, total variation |
+| What decisions rest on | each entity's Shapley share of the decisions, by situation, and how faithful the ranking is |
+| What each attention head looks at | a sentence per head, what each head looks at, every head's map, the shifts by situation and each token's change in the biggest ones, each head's spread ([guide](attention-heads.md)) |
 | More | anything you put in `study.extra_sections` (`{title: html}`) |
 | Reading this page well | the four habits |
 
@@ -29,7 +31,7 @@ A new technique can add its own section to every page:
 ```python
 from cds_interpret.report import section
 
-@section("Attributions", order=35)            # built-in orders: 0, 10, 20, 30, 40, 50, 90
+@section("Attributions", order=35)            # built-in orders: 0, 10, 20, 30, 40, 45, 47, 50, 90
 def attributions(study):
     res = getattr(study, "attribution_results", None)
     if res is None:
@@ -48,6 +50,8 @@ from cds_interpret.viz import field, gallery, plots
 svg = plots.heatmap(rows, cols, values, "AUROC by layer", vmin=0.5, vmax=1.0)
 svg = plots.lines({"threat": (steps, scores)}, "When did it learn threats?", xlabel="steps", ylabel="AUROC")
 svg = plots.bars(labels, values, "Goal share by arm", lo=lows, hi=highs)
+svg = plots.heatmap(rows, cols, changes, "Change by situation", vmax=20, diverging=True)   # red below 0, blue above
+svg = plots.head_grid(maps, layers, heads, queries, keys, "Each head's map")        # one small map per head
 svg = field.moment_svg(moments.frames, t, me, landing=(x, y), title="a moment")   # one moment from above
 svg = field.field_heatmap(values, xs, ys, "value by ball position")                 # a value over the field
 clip = field.clip_data(frames, t0, t1, me)                                          # for an animated canvas

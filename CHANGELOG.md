@@ -3,6 +3,50 @@
 All notable changes to cds-interpret are written down here. The project follows
 [Semantic Versioning](https://semver.org); before 1.0, minor versions may change the API (each change is listed).
 
+## [0.7.0] - 2026-10-23
+
+### Added
+
+- **What each attention head looks at.** For a network with attention over its tokens (its own car, the ball,
+  team-mates, opponents): `study.attention(tokens=[...])` reads every attention layer the network runs and gives,
+  per layer and head, the share of attention each token gets from each token, by name, averaged over the recorded
+  moments; how spread out each head is (entropy); the situations where each head's attention shifts most - kickoff,
+  the ball in the air, the ball in our half, an opponent close, the ball close, low boost and every yes / no label,
+  each compared within open play, with a 95% interval from resampling whole games; and a sentence per head ("L2 H2
+  watches the ball (55% of its attention); more so at kickoffs (+25 points)"). It returns `attention.AttentionMaps`
+  (`summary()`, `describe()`, `to_dict()`, `save()`), and the study page gets a section with a map per head and the
+  shifts by situation. Guide: docs/howto/attention-heads.md.
+- **Per-head attention from any module, fused kernels included** (`cds_interpret.attention`): a hook captures each
+  attention module's input and the probabilities are recomputed from its own query and key projections in float32,
+  so kernels that never return their weights (`scaled_dot_product_attention`, flash attention, a transformer layer's
+  fast path) are read too, and the network runs unchanged. Built in: `nn.MultiheadAttention` (masks, `kdim`,
+  unbatched, either batch layout) and `nn.TransformerEncoderLayer` (pre- or post-norm, fast path, nested tensors).
+  Your own module: `attention.recompute(qkv=..., heads=..., norm=..., keep=...)` from the names of its parts, a method
+  `attention_probs(...)`, or any `fn(module, args, kwargs)` as an `attention.Site`; `register_attention` for a class.
+  `attention.probs(net, x)` gives the raw [batch, heads, queries, keys] probabilities.
+- **Tokens whose order changes** (`attention.Tokens(names, roles=fn)`): a set of cars by role - attention to every
+  token of a role added up, rows averaged - with absent (masked) tokens left out.
+- **`cds-interpret attention`**: a recording and your policy (`--policy module:factory`, `--tokens`, `--sites`,
+  `--query`, `--critic`, `--max-moments`) to the page, every figure as SVG and the numbers as JSON; `--demo` runs it
+  on a new demo bot with an attention block (`ci.demo.attention_policy()`, weights shipped) in half a minute.
+- Figures: `plots.head_grid` (one small map per layer and head) and, for `plots.heatmap`, signed values on a red -
+  gray - blue ramp (`diverging=True`), text of your own in the cells (`text=`) and hover text (`tips=`).
+
+### Fixed
+
+- **RLBot bots and scripts dying mid-match** with "Error while unpacking message ... Invalid offset": rlbot before
+  2.0.0b56 polls RLBotServer's socket without blocking and, when a message had only partly arrived, lost the part it
+  had read and with it the stream's framing. The overlay (`with_thoughts`), the watch script (`watch_thoughts`) and
+  the recorder (`with_recorder`) now make rlbot read each message whole on those versions (`overlay.fix_socket_reads`:
+  the first byte read the caller's way, the rest waited for, the socket's mode restored); 2.0.0b56 and newer, which
+  read whole messages themselves, are left alone.
+
+### Changed
+
+- `Study(..., layers=[])` now studies no layers (for attention heads or what decisions rest on alone); before, an
+  empty list meant the default layers, as `layers=None` still does.
+- `plots.heatmap` widens itself to fit its title and note, and sets long column names at an angle.
+
 ## [0.6.0] - 2026-10-18
 
 ### Added

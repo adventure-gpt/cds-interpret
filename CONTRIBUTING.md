@@ -58,7 +58,7 @@ One module per technique, each usable on its own with plain arrays and tensors; 
   ```python
   from cds_interpret.report import section
 
-  @section("Attributions", order=35)          # built-in sections: 0, 10, 20, 30, 40, 50, 90
+  @section("Attributions", order=35)          # built-in sections: 0, 10, 20, 30, 40, 45, 47, 50, 90
   def _attributions(study):
       res = getattr(study, "attribution_results", None)
       return "" if res is None else render(res)  # return "" to leave the section out

@@ -71,5 +71,7 @@ jobs:
           /tmp/fresh/bin/cds-interpret doctor
           /tmp/fresh/bin/cds-interpret demo --source synthetic --out /tmp/demo
           test -s /tmp/demo/report.html
+          /tmp/fresh/bin/cds-interpret attention --demo --source synthetic --out /tmp/attention
+          test -s /tmp/attention/attention.html
           /tmp/fresh/bin/cds-interpret panel /tmp/panel.toml
           test -s /tmp/panel.toml

@@ -119,6 +119,14 @@ distribution moves. Over whole games: the goal share, or how often something hap
 If removing the "threat on goal" idea changes what the bot does when its goal is threatened - and removing a random
 idea of the same size doesn't - the bot relies on it. [Causal tests](howto/causal-tests.md) shows how.
 
+## Attention heads: where each head looks
+
+Some networks read the game as a handful of **tokens** - their own car, the ball, each other car - and let them look
+at each other through **attention**. Each **head** spreads a token's attention over the tokens, a share each, at every
+decision. Those shares are numbers you can average over recorded moments and compare between situations: which head
+watches the ball, which one turns to an opponent when it comes close. They say where a head looks, not what the
+decision rests on - that takes an edit. [What each attention head looks at](howto/attention-heads.md).
+
 ## The live overlay
 
 The overlay is the same machinery, live. A small **pack** file says which features and probes to read from which

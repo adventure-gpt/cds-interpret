@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 546 335" width="546" height="335" role="img" aria-label="Each head&#x27;s map: who looks at whom">
+<style>svg{--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;--s3:#eda100;--s4:#e87ba4;--s5:#008300;}@media (prefers-color-scheme: dark){svg{--surface:#1a1a19;--ink:#ffffff;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--s0:#3987e5;--s1:#d95926;--s2:#199e70;--s3:#c98500;--s4:#d55181;--s5:#008300;}}text{font-family:system-ui, -apple-system, "Segoe UI", sans-serif;fill:var(--ink2);font-size:12px} .t{fill:var(--ink);font-size:14px;font-weight:600}.m{fill:var(--muted);font-size:11px} .g{stroke:var(--grid);stroke-width:1} .ax{stroke:var(--axis);stroke-width:1}</style>
+<rect width="546" height="335" fill="var(--surface)"/>
+<text class="t" x="16" y="24">Each head&#x27;s map: who looks at whom</text>
+<text class="m" x="127.0" y="52" text-anchor="middle">head 1</text>
+<text class="m" transform="translate(101.0,97) rotate(-45)">own car</text>
+<text class="m" transform="translate(125.0,97) rotate(-45)">ball</text>
+<text class="m" transform="translate(149.0,97) rotate(-45)">opponent</text>
+<text class="m" x="221.0" y="52" text-anchor="middle">head 2</text>
+<text class="m" transform="translate(195.0,97) rotate(-45)">own car</text>
+<text class="m" transform="translate(219.0,97) rotate(-45)">ball</text>
+<text class="m" transform="translate(243.0,97) rotate(-45)">opponent</text>
+<text class="t" x="8" y="144.0" style="font-size:13px">L1</text>
+<text x="85" y="119.0" text-anchor="end" style="font-size:11px">own car</text>
+<text x="85" y="143.0" text-anchor="end" style="font-size:11px">ball</text>
+<text x="85" y="167.0" text-anchor="end" style="font-size:11px">opponent</text>
+<rect x="92" y="104" width="22" height="22" rx="2" fill="#86b6ef"><title>L1 head 1: own car looks at own car 29.1%</title></rect>
+<text x="103.0" y="118.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">29</text>
+<rect x="116" y="104" width="22" height="22" rx="2" fill="#256abf"><title>L1 head 1: own car looks at ball 62.8%</title></rect>
+<text x="127.0" y="118.5" text-anchor="middle" style="fill:#ffffff;font-size:10px;pointer-events:none">63</text>
+<rect x="140" y="104" width="22" height="22" rx="2" fill="#b7d3f6"><title>L1 head 1: own car looks at opponent 8.1%</title></rect>
+<text x="151.0" y="118.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">8</text>
+<rect x="92" y="128" width="22" height="22" rx="2" fill="#2a78d6"><title>L1 head 1: ball looks at own car 61.4%</title></rect>
+<text x="103.0" y="142.5" text-anchor="middle" style="fill:#ffffff;font-size:10px;pointer-events:none">61</text>
+<rect x="116" y="128" width="22" height="22" rx="2" fill="#86b6ef"><title>L1 head 1: ball looks at ball 23.0%</title></rect>
+<text x="127.0" y="142.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">23</text>
+<rect x="140" y="128" width="22" height="22" rx="2" fill="#9ec5f4"><title>L1 head 1: ball looks at opponent 15.6%</title></rect>
+<text x="151.0" y="142.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">16</text>
+<rect x="92" y="152" width="22" height="22" rx="2" fill="#1c5cab"><title>L1 head 1: opponent looks at own car 77.1%</title></rect>
+<text x="103.0" y="166.5" text-anchor="middle" style="fill:#ffffff;font-size:10px;pointer-events:none">77</text>
+<rect x="116" y="152" width="22" height="22" rx="2" fill="#86b6ef"><title>L1 head 1: opponent looks at ball 21.0%</title></rect>
+<text x="127.0" y="166.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">21</text>
+<rect x="140" y="152" width="22" height="22" rx="2" fill="#cde2fb"><title>L1 head 1: opponent looks at opponent 1.9%</title></rect>
+<text x="151.0" y="166.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">2</text>
+<rect x="186" y="104" width="22" height="22" rx="2" fill="#86b6ef"><title>L1 head 2: own car looks at own car 22.2%</title></rect>
+<text x="197.0" y="118.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">22</text>
+<rect x="210" y="104" width="22" height="22" rx="2" fill="#5598e7"><title>L1 head 2: own car looks at ball 40.2%</title></rect>
+<text x="221.0" y="118.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">40</text>
+<rect x="234" y="104" width="22" height="22" rx="2" fill="#5598e7"><title>L1 head 2: own car looks at opponent 37.5%</title></rect>
+<text x="245.0" y="118.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">38</text>
+<rect x="186" y="128" width="22" height="22" rx="2" fill="#86b6ef"><title>L1 head 2: ball looks at own car 27.5%</title></rect>
+<text x="197.0" y="142.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">28</text>
+<rect x="210" y="128" width="22" height="22" rx="2" fill="#b7d3f6"><title>L1 head 2: ball looks at ball 11.6%</title></rect>
+<text x="221.0" y="142.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">12</text>
+<rect x="234" y="128" width="22" height="22" rx="2" fill="#2a78d6"><title>L1 head 2: ball looks at opponent 60.9%</title></rect>
+<text x="245.0" y="142.5" text-anchor="middle" style="fill:#ffffff;font-size:10px;pointer-events:none">61</text>
+<rect x="186" y="152" width="22" height="22" rx="2" fill="#3987e5"><title>L1 head 2: opponent looks at own car 50.8%</title></rect>
+<text x="197.0" y="166.5" text-anchor="middle" style="fill:#ffffff;font-size:10px;pointer-events:none">51</text>
+<rect x="210" y="152" width="22" height="22" rx="2" fill="#3987e5"><title>L1 head 2: opponent looks at ball 49.0%</title></rect>
+<text x="221.0" y="166.5" text-anchor="middle" style="fill:#ffffff;font-size:10px;pointer-events:none">49</text>
+<rect x="234" y="152" width="22" height="22" rx="2" fill="#cde2fb"><title>L1 head 2: opponent looks at opponent 0.3%</title></rect>
+<text class="t" x="8" y="234.0" style="font-size:13px">L2</text>
+<text x="85" y="209.0" text-anchor="end" style="font-size:11px">own car</text>
+<text x="85" y="233.0" text-anchor="end" style="font-size:11px">ball</text>
+<text x="85" y="257.0" text-anchor="end" style="font-size:11px">opponent</text>
+<rect x="92" y="194" width="22" height="22" rx="2" fill="#5598e7"><title>L2 head 1: own car looks at own car 39.3%</title></rect>
+<text x="103.0" y="208.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">39</text>
+<rect x="116" y="194" width="22" height="22" rx="2" fill="#6da7ec"><title>L2 head 1: own car looks at ball 29.6%</title></rect>
+<text x="127.0" y="208.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">30</text>
+<rect x="140" y="194" width="22" height="22" rx="2" fill="#6da7ec"><title>L2 head 1: own car looks at opponent 31.1%</title></rect>
+<text x="151.0" y="208.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">31</text>
+<rect x="92" y="218" width="22" height="22" rx="2" fill="#2a78d6"><title>L2 head 1: ball looks at own car 61.3%</title></rect>
+<text x="103.0" y="232.5" text-anchor="middle" style="fill:#ffffff;font-size:10px;pointer-events:none">61</text>
+<rect x="116" y="218" width="22" height="22" rx="2" fill="#86b6ef"><title>L2 head 1: ball looks at ball 26.6%</title></rect>
+<text x="127.0" y="232.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">27</text>
+<rect x="140" y="218" width="22" height="22" rx="2" fill="#b7d3f6"><title>L2 head 1: ball looks at opponent 12.1%</title></rect>
+<text x="151.0" y="232.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">12</text>
+<rect x="92" y="242" width="22" height="22" rx="2" fill="#256abf"><title>L2 head 1: opponent looks at own car 66.3%</title></rect>
+<text x="103.0" y="256.5" text-anchor="middle" style="fill:#ffffff;font-size:10px;pointer-events:none">66</text>
+<rect x="116" y="242" width="22" height="22" rx="2" fill="#86b6ef"><title>L2 head 1: opponent looks at ball 23.0%</title></rect>
+<text x="127.0" y="256.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">23</text>
+<rect x="140" y="242" width="22" height="22" rx="2" fill="#b7d3f6"><title>L2 head 1: opponent looks at opponent 10.7%</title></rect>
+<text x="151.0" y="256.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">11</text>
+<rect x="186" y="194" width="22" height="22" rx="2" fill="#9ec5f4"><title>L2 head 2: own car looks at own car 15.6%</title></rect>
+<text x="197.0" y="208.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">16</text>
+<rect x="210" y="194" width="22" height="22" rx="2" fill="#256abf"><title>L2 head 2: own car looks at ball 66.2%</title></rect>
+<text x="221.0" y="208.5" text-anchor="middle" style="fill:#ffffff;font-size:10px;pointer-events:none">66</text>
+<rect x="234" y="194" width="22" height="22" rx="2" fill="#9ec5f4"><title>L2 head 2: own car looks at opponent 18.2%</title></rect>
+<text x="245.0" y="208.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">18</text>
+<rect x="186" y="218" width="22" height="22" rx="2" fill="#86b6ef"><title>L2 head 2: ball looks at own car 28.4%</title></rect>
+<text x="197.0" y="232.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">28</text>
+<rect x="210" y="218" width="22" height="22" rx="2" fill="#3987e5"><title>L2 head 2: ball looks at ball 49.9%</title></rect>
+<text x="221.0" y="232.5" text-anchor="middle" style="fill:#ffffff;font-size:10px;pointer-events:none">50</text>
+<rect x="234" y="218" width="22" height="22" rx="2" fill="#86b6ef"><title>L2 head 2: ball looks at opponent 21.7%</title></rect>
+<text x="245.0" y="232.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">22</text>
+<rect x="186" y="242" width="22" height="22" rx="2" fill="#86b6ef"><title>L2 head 2: opponent looks at own car 27.7%</title></rect>
+<text x="197.0" y="256.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">28</text>
+<rect x="210" y="242" width="22" height="22" rx="2" fill="#3987e5"><title>L2 head 2: opponent looks at ball 49.1%</title></rect>
+<text x="221.0" y="256.5" text-anchor="middle" style="fill:#ffffff;font-size:10px;pointer-events:none">49</text>
+<rect x="234" y="242" width="22" height="22" rx="2" fill="#86b6ef"><title>L2 head 2: opponent looks at opponent 23.2%</title></rect>
+<text x="245.0" y="256.5" text-anchor="middle" style="fill:#0b0b0b;font-size:10px;pointer-events:none">23</text>
+<rect x="91" y="289" width="12" height="8" fill="#cde2fb"/>
+<rect x="103" y="289" width="12" height="8" fill="#b7d3f6"/>
+<rect x="115" y="289" width="12" height="8" fill="#9ec5f4"/>
+<rect x="127" y="289" width="12" height="8" fill="#86b6ef"/>
+<rect x="139" y="289" width="12" height="8" fill="#6da7ec"/>
+<rect x="151" y="289" width="12" height="8" fill="#5598e7"/>
+<rect x="163" y="289" width="12" height="8" fill="#3987e5"/>
+<rect x="175" y="289" width="12" height="8" fill="#2a78d6"/>
+<rect x="187" y="289" width="12" height="8" fill="#256abf"/>
+<rect x="199" y="289" width="12" height="8" fill="#1c5cab"/>
+<rect x="211" y="289" width="12" height="8" fill="#184f95"/>
+<rect x="223" y="289" width="12" height="8" fill="#104281"/>
+<rect x="235" y="289" width="12" height="8" fill="#0d366b"/>
+<text class="m" x="85" y="297" text-anchor="end">0%</text>
+<text class="m" x="253" y="297">100%</text>
+<text class="m" x="16" y="325">rows: the token looking (query); columns: the token looked at; percent of its attention</text>
+</svg>

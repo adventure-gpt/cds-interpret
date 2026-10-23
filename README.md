@@ -122,6 +122,10 @@ network saw. The [quickstart](docs/quickstart.md) walks through both ways, step 
   watching a match. [Customize the panel](docs/howto/customize-the-panel.md).
 - **Record games three ways.** In RocketSim against itself or a scripted opponent, in the real game through RLBot, or
   in your own RLGym environment.
+- **See what each attention head looks at.** For a network with attention over its own car, the ball, team-mates
+  and opponents: each head's map, what it watches, and how that shifts at kickoffs, with the ball in the air, with
+  an opponent close - with a sentence per head. Works with fused attention kernels too.
+  [What each attention head looks at](docs/howto/attention-heads.md).
 - **See what a decision rests on.** Was it the ball, its own car or the opponent? Which of its ideas tipped it?
   Shapley values - a fair way of splitting credit between things that act together - say, with a score for how far
   to trust the answer.
@@ -148,6 +152,7 @@ network saw. The [quickstart](docs/quickstart.md) walks through both ways, step 
 | [Name your bot's features](docs/howto/name-features.md) | from numbers to names you trust, end to end |
 | [Test what it relies on](docs/howto/causal-tests.md) | switching ideas off and up, in moments and in games |
 | [See what a decision rests on](docs/howto/what-decisions-rest-on.md) | the ball, its car, the opponents; and what each feature does |
+| [What each attention head looks at](docs/howto/attention-heads.md) | per-head attention maps by token, and how they shift with the situation |
 | [Check your tools](docs/howto/check-your-tools.md) | how to tell when a technique is misleading you |
 | [Watch it think in RLBot](docs/howto/overlay.md) | the live thoughts overlay |
 | [Why this move, and what it's looking at](docs/howto/why-and-looking.md) | the panel's two rows about each decision: how to read them, what they cost |

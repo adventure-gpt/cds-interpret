@@ -6,7 +6,8 @@ N moments, C cars, D numbers per layer or input, A actions. Every function's own
 `help(ci.Study.probes)`.
 
 - [The policy](#the-policy) · [Frames](#frames) · [Labels](#labels) · [Moments](#moments) · [Recording](#recording)
-- [Study](#study) · [Hooks](#hooks) · [Probes](#probes) · [Sparse autoencoders](#sparse-autoencoders) ·
+- [Study](#study) · [Hooks](#hooks) · [Attention heads](#attention-heads) · [Probes](#probes) ·
+  [Sparse autoencoders](#sparse-autoencoders) ·
   [Edits](#edits) · [Analysis](#analysis) · [Habits](#habits) · [Tracking](#tracking) ·
   [Following training](#following-training-and-choosing-practice)
 - [Naming features](#naming-features) · [The overlay](#the-overlay) · [The panel](#the-panel) ·
@@ -114,7 +115,8 @@ New sources build on `record._builder.Recording` (`add_step`, `set_events`, `add
 `cds_interpret.study`
 
 **`Study(policy, moments, layers=None, labels=None, test_frac=0.25, seed=0, log=print, batch=4096)`** builds the
-inputs (or uses the recorded ones), computes missing labels, picks the layers and splits the games.
+inputs (or uses the recorded ones), computes missing labels, picks the layers and splits the games. `layers=[]`: no
+layers, for the techniques that read the whole network (attention heads, what decisions rest on).
 
 | member | returns |
 |---|---|
@@ -132,6 +134,7 @@ inputs (or uses the recorded ones), computes missing labels, picks the layers an
 | `check_feature(layer, feature, scales=(0.0, 3.0))` | `FeatureCheck`: the feature (a number or a confirmed name) turned off and up, and what changes |
 | `why_not(label)` | why a label has no probe, in words (None if it can have one) |
 | `attribution(n=400, donors=4, pool=4000, by_labels=(...), seed=0)` | what decisions rest on, by entity: `{"shares": {situation: {entity: share}}, "faithfulness", ...}` ([how-to](howto/what-decisions-rest-on.md)) |
+| `attention(sites=None, tokens=None, query=None, forward=None, situations=None, min_moments=50, min_games=3, boot=200, seed=0)` | `attention.AttentionMaps`: what each attention head looks at, by token, and how it shifts by situation; kept as `attention_results` ([how-to](howto/attention-heads.md)) |
 | `report(path="report.html", title=None)` | the path of the HTML page |
 | `activations(layer)`, `x`, `labels`, `kinds`, `games`, `train`, `test`, `layers`, `extra_sections` | |
 
@@ -160,6 +163,35 @@ min_ap_lift=4.0)` (precise or clean detectors: `analysis.detects`), `summary(top
 | `list_layers(model, example=None, forward=None)` | `list[LayerInfo]` (path, type, shape, width, leaf, activation) |
 | `default_layers(infos)`, `sequential_layers(seq, prefix="", tag="")`, `get_module(model, path)` | |
 | `tail(seq, after)` | the rest of a `Sequential` after module `after`: a layer's output -> the network's output |
+
+## Attention heads
+
+`cds_interpret.attention` - [how-to](howto/attention-heads.md). Per-head attention probabilities are recomputed from
+each attention module's captured input and its own query / key projections (softmax(Q K^T / sqrt(d)) per head, in
+float32), so fused kernels that never return their weights are read too. Shapes: B moments, H heads, Q query tokens,
+K key tokens, S attention layers, R token names (roles).
+
+| | |
+|---|---|
+| `probs(model, x, sites=None, forward=None)` | `{layer: [B, H, Q, K]}` for one batch, in the order the network runs them |
+| `iter_probs(model, forward, x, sites=None, batch=4096, strict=None)` | `(start row, {layer: [b, H, Q, K]})` batch by batch |
+| `AttentionTap(model, sites=None)` | the hooks (a context manager, or `attach()` / `detach_hooks()`): `probs[name]`, `order` |
+| `find_sites(model)` | `{path: Site}`: every `nn.MultiheadAttention`, `nn.TransformerEncoderLayer` (read from the layer, fast path or not), registered class and module with `attention_probs` |
+| `Site(path, probs=None)` | one attention layer: a module path and, optionally, `fn(module, args, kwargs) -> [B, H, Q, K]` |
+| `recompute(qkv=None, q=None, k=None, heads=None, norm=None, x=None, context=None, keep=None, masked=None, layout="qkv", scale=None)` | that function for your own module, from the names of its parts and forward arguments |
+| `softmax_attention(q, k, heads=None, keep=None, bias=None, scale=None)` | `[B, H, Q, K]` from projected queries and keys (`keep`: True = may attend) |
+| `mha_probs`, `encoder_layer_probs` | the built-in functions; `register_attention(cls, fn)` adds one for a class |
+| `Tokens(names, roles=None, queries=None)` | token names; `roles(x) -> [B, K]` ints for tokens whose order changes (-1: absent) |
+| `aggregate(p, roles, n_roles)` | one layer's probabilities by role: `full`, `focus`, `entropy`, `spread`, `self`, `present` |
+| `measure(model, forward, x, sites=None, tokens=None, query=None, batch=4096)` | `AttentionMaps` without situations |
+| `situations(moments, labels=None, open_play=True, ...)` | `{name: Situation(on, valid, when)}`: kickoff, ball in the air, ball in our half, opponent close, ball close, low boost, the yes / no labels |
+| `shift_stats(focus, games, situations, boot=200, seed=0, min_moments=50, min_games=3)` | per situation: `shift`, `lo`, `hi` (95% by resampling games), `tv`, `tv_lo`, `tv_hi`, counts - or `skipped` |
+| `figures(maps)` | `{"focus", "heads", "shifts", "shift: <situation>": svg}` |
+
+**`AttentionMaps`**: `layers` (L1, L2, ...), `paths`, `heads`, `queries`, `keys`, per moment `full` [N, S, H, Rq, R],
+`focus` [N, S, H, R], `entropy`, `spread`, `selfish` [N, S, H], `present` [N, R]; `games`, `query`, `shifts`;
+`head_names`, `mean(where=None)`, `focus_mean(where=None)`, `table()`, `top_shifts(s, h, n=3)`, `describe()` (a
+sentence per head), `summary()`, `to_dict()`, `save(path)` (JSON).
 
 ## Probes
 
@@ -303,6 +335,7 @@ Each function's docstring gives its arguments and what it returns.
 | `save_pack(pack, path)`, `load_pack(path)` | `.npz`, no pickles (format version 2; version 1 packs load) |
 | `Thoughts(pack)` | `read(h, output)` (h: the pack layer's values), `land_xy(h_land)` (the values of the layer named in `pack["land"]["module"]`, which may be another layer), `outlook_value(h)`, `names`, `fd` [F, D] decoder directions (or None), `donors` [(Frames, me)], `donor_cars()` |
 | `with_thoughts(BotClass, pack, network=None, panel=None, hooks=None, input_layer="", critic=None, worker=True, title=None, draw_every=None, x=None, y=None, policy=None, error_log=None, extras=None)` | your RLBot v5 bot class (a Bot or a Hivemind) with the overlay. `policy` / `critic`: `"module:factory"` or `("module:factory", {kwargs})`, built in the worker (a Policy object with `worker=False`); a critic taking `state` gets the game; `extras(bot, packet) -> {name: array}` adds your bot's own state to it; `error_log`: a file for its errors |
+| `fix_socket_reads()` | rlbot before 2.0.0b56: makes its SocketRelay read each message from RLBotServer whole (a message that had only partly arrived used to be lost with the stream's framing - "Invalid offset"); called by `with_thoughts`, `watch_thoughts` and `with_recorder`; newer rlbot is left alone. Returns whether the fix is in place |
 | `watch_thoughts(policy, pack, cars, panel=None, hooks=None, title=None, team_sizes=None, error_log=None, observe=None)` | an RLBot v5 Script class drawing the thoughts of a bot you can't modify: `cars` a piece of its name, player indices or a function of the packet (`match_cars`); `observe(packet, cars, field_info)` -> inputs or {"obs", "mirrored", "mask", "state"} when the obs function isn't enough; `cds-interpret watch-template` writes one ([how-to](howto/watch-a-bot.md)) |
 | `Explainer(thoughts, policy, seed=0, freeze=True)` | the two decision readings: `why(x, h, action, acts=None)` -> [{"name", "push"}], `looking(state, me, action, donors=3)` -> {part: share}; `available`, `notes` |
 | `load_policy(spec)`, `try_readings(pack, policy, donors=3)` | a Policy from `"module:factory"`; both readings tried on the pack's own moments: {"why_ms", "looking_ms", "problems"} |
@@ -351,7 +384,7 @@ functions. `cds_interpret.overlay.team`: `check_follow`, `check_landing_for`, `c
 ## The study page and figures
 
 `cds_interpret.report`: `build(study, title)`, `section(title, order)` (a decorator), `SECTIONS`.
-`cds_interpret.viz.plots`: `heatmap`, `lines`, `bars`, `save`. `cds_interpret.viz.field`: `moment_svg`,
+`cds_interpret.viz.plots`: `heatmap` (also `text=`, `diverging=True`, `tips=`), `head_grid`, `lines`, `bars`, `save`. `cds_interpret.viz.field`: `moment_svg`,
 `field_heatmap`, `clip_data`, `clip_canvas`, `CLIP_JS`. `cds_interpret.viz.gallery`: `feature_card`, `gallery_html`.
 [How-to](howto/figures.md).
 
@@ -362,9 +395,10 @@ functions. `cds_interpret.overlay.team`: `check_follow`, `check_landing_for`, `c
 
 ## The demo bot
 
-`cds_interpret.demo`: `policy(weights=None)`, `synthetic_moments(n_games=60, per_game=60, seed=1)`, `run(out, source,
-games, seconds)`, `obs(frames, me)`, `teacher(frames, me)`, `DemoNet`, `train(steps, n, seed)`, `random_frames(n, rng)`,
-`nearest_actions(controls, table)`.
+`cds_interpret.demo`: `policy(weights=None)`, `attention_policy(weights=None)` (the same bot with an entity-attention
+block; its tokens are `TOKENS`), `synthetic_moments(n_games=60, per_game=60, seed=1)`, `demo_moments(policy, source,
+games, seconds)`, `run(out, source, games, seconds)`, `obs(frames, me)`, `teacher(frames, me)`, `DemoNet`,
+`DemoAttentionNet`, `train(steps, n, seed, attention=False)`, `random_frames(n, rng)`, `nearest_actions(controls, table)`.
 
 ## Errors
 
@@ -381,4 +415,7 @@ pack, and with `--policy` tries "why this move" and "looking at" and times them)
 `cds-interpret watch-template [folder] [--force]` (a display-only script for a bot you can't modify),
 `cds-interpret refit-pack old.npz --policy NEW --old-policy OLD --out DIR [--moments DIR] [--games 24] [--seconds 90]
 [--team-size 1] [--opponent chaser] [--min-r 0.5]` (a pack carried over to a newer checkpoint),
+`cds-interpret attention [recording] --policy module:factory [--tokens "own car,ball,opponent"] [--sites module:factory]
+[--query TOKEN] [--critic] [--out cds-attention] [--max-moments N]` (what each attention head looks at: the page, the
+figures and the numbers; `--demo [--source auto|rocketsim|synthetic]` on the attention demo bot),
 `cds-interpret --version`; also `python -m cds_interpret`.

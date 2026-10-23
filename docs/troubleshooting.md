@@ -6,7 +6,7 @@ what to do.
 A good first step for anything: run `cds-interpret doctor`. It lists what's installed and what's ready.
 
 ```text
-cds-interpret 0.6.0 on Python 3.12.10 (Windows)
+cds-interpret 0.7.0 on Python 3.12.10 (Windows)
   torch      2.14.1+cpu
   ...
 Ready: probes, features, edits, reports (always); recording in RocketSim; RLGym bridges; the RLBot overlay and recorder
@@ -230,6 +230,13 @@ my_bot.interp:make_policy` says which, and how to add it. [The rows' guide](howt
 **The landing ring jumps around.**
 Read it from a steadier layer: `study.steadiness(layer)` compares layers, and `make_pack` picks the steadiest by
 itself. See [probes you show live](howto/probes.md#probes-you-show-live).
+
+**The bot or the watch script stops mid-match: "Error while unpacking message ... Invalid offset" in its log.**
+That's the rlbot package before 2.0.0b56 losing its place in the stream from RLBotServer: when a message had only
+partly arrived as the bot checked for one, the part it had read was lost. Since 0.7.0, the overlay, the watch script
+and the recorder fix it for themselves on those versions - each message is read whole - and leave rlbot 2.0.0b56 and
+newer alone (they read whole messages by themselves). For a bot without them, call
+`cds_interpret.overlay.fix_socket_reads()` once before it connects.
 
 **My bot feels slower with the overlay.**
 The overlay adds a few read-only listeners to your bot's network and nothing else to its decision. All the rest runs
