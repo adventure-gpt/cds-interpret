@@ -33,7 +33,15 @@ from typing import Any
 import numpy as np
 import torch
 
-from .._rlbot import PacketEvents, find_network, our_indices, packet_row, prediction_path, wrap_after_decision
+from .._rlbot import (
+    PacketEvents,
+    find_network,
+    fix_socket_reads,
+    our_indices,
+    packet_row,
+    prediction_path,
+    wrap_after_decision,
+)
 from ..hooks import LayerTap
 from ._builder import Recording, empty_events
 
@@ -72,6 +80,7 @@ def with_recorder(bot_class: type, out: str | os.PathLike[str] = "recordings/rlb
         tick_skip: ticks between your bot's decisions, if it holds its controls between them (for the meta only).
     """
     out = Path(out)
+    fix_socket_reads()                                   # (rlbot before 2.0.0b56: read whole messages)
 
     def init(bot: Any) -> None:
         net = find_network(bot, network)

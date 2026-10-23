@@ -276,3 +276,70 @@ def spectated(packet: Any) -> int | None:
         return None if v is None else int(v)
     except (TypeError, ValueError):
         return None
+
+
+# ------------------------------------------------------------------------------------- whole messages off the socket
+WHOLE_MESSAGES_SINCE = (2, 0, 0, 1, 56)
+"""The rlbot version (2.0.0b56) whose SocketRelay reads each message whole by itself."""
+
+
+def _version_key(version: str) -> tuple[int, int, int, int, int] | None:
+    """A sortable key for an rlbot version: "2.0.0-beta.54" and "2.0.0b54" -> (2, 0, 0, 1, 54); a final release
+    sorts after its betas (stage 3). None when it can't be read."""
+    import re
+    m = re.match(r"^\s*v?(\d+)\.(\d+)(?:\.(\d+))?(?:[-.]?(a|alpha|b|beta|rc|c)[-.]?(\d+))?", str(version), re.I)
+    if not m:
+        return None
+    stage = {"a": 0, "alpha": 0, "b": 1, "beta": 1, "rc": 2, "c": 2}.get((m.group(4) or "").lower(), 3)
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0), stage, int(m.group(5) or 0))
+
+
+def needs_whole_messages(version: str) -> bool:
+    """Whether an rlbot version's SocketRelay can lose its place in the stream (before 2.0.0b56: see
+    read_message_whole)."""
+    key = _version_key(version)
+    return key is not None and key < WHOLE_MESSAGES_SINCE
+
+
+def read_message_whole(relay: Any) -> bytes:
+    """One message off an RLBot SocketRelay's socket, whole. RLBot's managers poll the socket without blocking; in
+    rlbot before 2.0.0b56, a message that had only partly arrived made ``read_message`` give up halfway, the bytes it
+    had read were lost, the stream lost its framing and the bot or script died a moment later ("Error while
+    unpacking message ... Invalid offset"). Here the first byte is read the caller's way (nothing waiting: the
+    socket's BlockingIOError, as before), and the rest of the 2-byte length and the message are then waited for,
+    the socket's own blocking mode (or timeout) restored after."""
+    sock = relay.socket
+    first = sock.recv(1)
+    if not first:
+        raise EOFError
+    timeout = sock.gettimeout()
+    sock.settimeout(None)                                # (blocking)
+    try:
+        size = int.from_bytes(first + relay._read_exact(1), "big")
+        return relay._read_exact(size)
+    finally:
+        sock.settimeout(timeout)
+
+
+def fix_socket_reads() -> bool:
+    """Make rlbot's SocketRelay read whole messages (read_message_whole) when the installed rlbot is older than
+    2.0.0b56; newer versions are left alone. Safe to call more than once; the overlay, the watch script and the
+    recorder call it. Returns whether the fix is in place."""
+    try:
+        from rlbot import interface
+        from rlbot.version import __version__ as rlbot_version
+    except Exception:                                    # (no rlbot here: nothing to fix)
+        return False
+    relay = interface.SocketRelay
+    if getattr(relay.read_message, "_cds_whole", False):
+        return True
+    if not needs_whole_messages(rlbot_version):
+        return False
+
+    def read_message(self: Any) -> bytes:
+        return read_message_whole(self)
+    read_message._cds_whole = True                       # type: ignore[attr-defined]
+    read_message.__doc__ = read_message_whole.__doc__
+    relay._cds_original_read_message = relay.read_message   # type: ignore[attr-defined]
+    relay.read_message = read_message                    # type: ignore[method-assign]
+    return True

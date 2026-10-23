@@ -13,12 +13,15 @@ Follow / landing_cars              team modes: whose thoughts the panel shows, w
 Explainer / try_readings           "why this move" and "looking at" for one decision; trying them on a pack
 watch_thoughts(policy, pack, cars) a display-only RLBot script: the thoughts of a bot you can't modify
 draw_thoughts                      the panel itself, for your own drawing code
+fix_socket_reads                   rlbot before 2.0.0b56: read each message from RLBotServer whole (the overlay,
+                                   the watch script and the recorder call it themselves)
 =================================  ==============================================================================
 
 Display only: read-only hooks, a low-priority worker process, everything after your controls are sent. See
 docs/howto/overlay.md.
 """
 
+from .._rlbot import fix_socket_reads
 from .bot import with_thoughts
 from .explain import Explainer, load_policy, try_readings
 from .pack import (
@@ -70,6 +73,7 @@ __all__ = [
     "check_panel",
     "compute",
     "draw_thoughts",
+    "fix_socket_reads",
     "heading",
     "land_point",
     "landing_cars",

@@ -32,7 +32,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from .._rlbot import FrameGuard, _log, has_ball, landing_point, packet_row, spectated
+from .._rlbot import FrameGuard, _log, fix_socket_reads, has_ball, landing_point, packet_row, spectated
 from ..errors import CDSInterpretError, require
 from ..frames import Frames
 from ..hooks import LayerTap
@@ -86,6 +86,7 @@ def watch_thoughts(policy: Any, pack: str | os.PathLike[str], cars: Any, panel: 
             between packets; it is called on draw frames only.
     """
     Script: Any = require("rlbot.managers", "watching a bot in RLBot").Script
+    fix_socket_reads()                                   # (rlbot before 2.0.0b56: read whole messages)
 
     pack_path = os.fspath(pack)
     if cars is None or (isinstance(cars, str) and not cars.strip()):

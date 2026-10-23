@@ -46,6 +46,7 @@ from .._rlbot import (
     FrameGuard,
     _log,
     find_network,
+    fix_socket_reads,
     has_ball,
     landing_point,
     our_cars,
@@ -128,6 +129,7 @@ def with_thoughts(bot_class: type, pack: str | os.PathLike[str], network: str | 
             ``state`` and the policy's obs function receive (e.g. your bot's own state arrays). Keep it small and
             quick; names must not start with ``car_`` unless the array has a row per car.
     """
+    fix_socket_reads()                                   # (rlbot before 2.0.0b56: read whole messages)
     pack_path = os.fspath(pack)
     from .._specs import is_spec
     if worker and policy is not None and not is_spec(policy):
