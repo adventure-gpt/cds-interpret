@@ -3,12 +3,14 @@
     svg = heatmap(rows, cols, values, title=..., vmin=0.5, vmax=1.0, fmt="{:.2f}")
     svg = lines({"name": (xs, ys), ...}, title=..., xlabel=..., ylabel=..., vlines={20.0: "demos appear"})
     svg = bars(labels, values, title=...)
+    svg = heatmap(rows, cols, shifts, title=..., diverging=True)        # signed values: red below 0, blue above
+    svg = head_grid(maps, layers, heads, queries, keys, title=...)     # one small map per layer x head
     save(svg, "figure.svg")
 
 Every chart carries its own light / dark colours (a <style> with prefers-color-scheme), hairline grids, 2 px lines,
 8 px markers with a surface ring, a legend for two or more series, text in ink colours (never the series colour), and
 a <title> tooltip on every mark. Categorical colours are taken in a fixed order (validated palette: blue, orange,
-aqua, yellow, magenta, green); magnitudes use one blue ramp.
+aqua, yellow, magenta, green); magnitudes use one blue ramp; signed values a red - gray - blue diverging ramp.
 """
 from __future__ import annotations
 
@@ -21,6 +23,8 @@ SERIES_LIGHT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"
 SERIES_DARK = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300"]
 RAMP = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab",
         "#184f95", "#104281", "#0d366b"]
+DIVERGING_NEG = ["#f0efec", "#f6d3cf", "#f2b0a8", "#ec8b82", "#e66767", "#e34948", "#c53a39", "#a12d2c"]
+DIVERGING_POS = ["#f0efec", "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#2a78d6", "#1c5cab", "#104281"]
 FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif'
 
 
@@ -68,6 +72,13 @@ def _ramp(t: float) -> str:
     return RAMP[int(round(t * (len(RAMP) - 1)))]
 
 
+def _diverging(t: float) -> str:
+    """A colour for t in -1..1: gray at 0, red below, blue above."""
+    t = min(max(t, -1.0), 1.0)
+    side = DIVERGING_POS if t >= 0 else DIVERGING_NEG
+    return side[int(round(abs(t) * (len(side) - 1)))]
+
+
 def _ink_on(hex_color: str) -> str:
     r, g, b = (int(hex_color[i:i + 2], 16) / 255 for i in (1, 3, 5))
     lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
@@ -75,18 +86,32 @@ def _ink_on(hex_color: str) -> str:
 
 
 def heatmap(rows: list[str], cols: list[str], values, title: str, vmin: float = 0.0, vmax: float = 1.0,
-            fmt: str = "{:.2f}", cell: int = 52, row_w: int = 150, note: str = "") -> str:
+            fmt: str = "{:.2f}", cell: int = 52, row_w: int = 150, note: str = "", text=None,
+            diverging: bool = False, tips=None) -> str:
     """values [len(rows), len(cols)] (NaN = empty cell) on one blue ramp from vmin (lightest) to vmax (darkest), the
-    number printed in each cell."""
+    number printed in each cell - or ``text`` [len(rows), len(cols)] printed instead (strings; "" for none). With
+    ``diverging``, values run from -vmax (red) through 0 (gray) to +vmax (blue). ``tips``: hover text per cell
+    (default: row / column: value). Long column names are set at an angle."""
     vals = np.asarray(values, float)
-    w = row_w + cell * len(cols) + 60
-    h = 70 + 22 * len(rows) + 40 + (18 if note else 0)
+    labels = None if text is None else [[str(t) for t in row] for row in text]
+    if labels is not None:
+        longest = max((len(t) for row in labels for t in row), default=0)
+        cell = max(cell, int(6.2 * longest) + 12)
+    head_w = max((len(c) for c in cols), default=0) * 6.2
+    rotate = head_w > cell - 6
+    lift = int(head_w * 0.71) if rotate else 0
+    top = 64 + lift
+    w = row_w + cell * len(cols) + 60 + lift
+    w = max(w, int(24 + 7.6 * len(title)), int(24 + 6.0 * len(note)))       # (room for the title and the note)
     ch = 22
+    h = top + ch * len(rows) + 40 + (18 if note else 0)
     out = _open(w, h, title)
-    top = 64
     for j, c in enumerate(cols):
         x = row_w + cell * j + cell / 2
-        out.append(f'<text class="m" x="{x:.1f}" y="{top - 8}" text-anchor="middle">{html.escape(c)}</text>')
+        if rotate:
+            out.append(f'<text class="m" transform="translate({x - 2:.1f},{top - 8}) rotate(-45)">{html.escape(c)}</text>')
+        else:
+            out.append(f'<text class="m" x="{x:.1f}" y="{top - 8}" text-anchor="middle">{html.escape(c)}</text>')
     for i, r in enumerate(rows):
         y = top + ch * i
         out.append(f'<text x="{row_w - 8}" y="{y + 15}" text-anchor="end">{html.escape(r)}</text>')
@@ -95,20 +120,93 @@ def heatmap(rows: list[str], cols: list[str], values, title: str, vmin: float = 
             x = row_w + cell * j
             if not np.isfinite(v):
                 continue
-            t = (v - vmin) / max(vmax - vmin, 1e-12)
-            col = _ramp(t)
+            if diverging:
+                col = _diverging(v / max(abs(vmax), 1e-12))
+            else:
+                col = _ramp((v - vmin) / max(vmax - vmin, 1e-12))
+            tip = tips[i][j] if tips is not None else f"{r} / {cols[j]}: {fmt.format(v)}"
             out.append(f'<rect x="{x + 1}" y="{y + 1}" width="{cell - 2}" height="{ch - 2}" rx="2" fill="{col}">'
-                       f'<title>{html.escape(r)} / {html.escape(cols[j])}: {fmt.format(v)}</title></rect>')
-            out.append(f'<text x="{x + cell / 2}" y="{y + 15}" text-anchor="middle" style="fill:{_ink_on(col)};font-size:11px">'
-                       f'{fmt.format(v)}</text>')
+                       f'<title>{html.escape(tip)}</title></rect>')
+            shown = fmt.format(v) if labels is None else labels[i][j]
+            if shown:
+                out.append(f'<text x="{x + cell / 2}" y="{y + 15}" text-anchor="middle" '
+                           f'style="fill:{_ink_on(col)};font-size:11px;pointer-events:none">{html.escape(shown)}</text>')
     # scale legend
     ly = top + ch * len(rows) + 16
-    for k in range(len(RAMP)):
-        out.append(f'<rect x="{row_w + 12 * k}" y="{ly}" width="12" height="8" fill="{RAMP[k]}"/>')
-    out.append(f'<text class="m" x="{row_w - 6}" y="{ly + 8}" text-anchor="end">{fmt.format(vmin)}</text>')
-    out.append(f'<text class="m" x="{row_w + 12 * len(RAMP) + 6}" y="{ly + 8}">{fmt.format(vmax)}</text>')
+    ramp = DIVERGING_NEG[::-1] + DIVERGING_POS[1:] if diverging else RAMP
+    lo_v = -abs(vmax) if diverging else vmin
+    for k in range(len(ramp)):
+        out.append(f'<rect x="{row_w + 12 * k}" y="{ly}" width="12" height="8" fill="{ramp[k]}"/>')
+    out.append(f'<text class="m" x="{row_w - 6}" y="{ly + 8}" text-anchor="end">{fmt.format(lo_v)}</text>')
+    out.append(f'<text class="m" x="{row_w + 12 * len(ramp) + 6}" y="{ly + 8}">{fmt.format(vmax)}</text>')
     if note:
         out.append(f'<text class="m" x="16" y="{ly + 30}">{html.escape(note)}</text>')
+    out.append("</svg>")
+    return "\n".join(out)
+
+
+def head_grid(maps, layers: list[str], heads: list[int], queries: list[str], keys: list[str], title: str,
+              vmax: float | None = None, note: str = "", cell: int | None = None) -> str:
+    """One small heatmap per attention head: maps [S, H, Q, K] (layer, head, query token, key token; NaN = no map),
+    a row of panels per layer (``heads[s]`` panels in it), each with the queries down the side and the keys across
+    the top, every cell its share of the attention (printed in percent, and on hover). One blue ramp, 0 to vmax
+    (default: the largest share, rounded up to a tenth)."""
+    m = np.asarray(maps, float)
+    nq, nk = len(queries), len(keys)
+    if vmax is None:
+        top_v = float(np.nanmax(m)) if np.isfinite(m).any() else 1.0
+        vmax = min(1.0, max(0.2, math.ceil(top_v * 10) / 10))
+    cell = cell or (24 if max(nq, nk) <= 8 else 18)
+    gap, row_gap = 22, 18
+    qw = int(max(len(q) for q in queries) * 6.4) + 10
+    lw = 30
+    kh = int(max(len(k) for k in keys) * 6.2 * 0.71) + 8
+    nh = max(heads) if heads else 1
+    pw, ph = cell * nk, cell * nq
+    x0, top = lw + qw, 44 + 16 + kh
+    w = x0 + nh * (pw + gap) + 16 + kh
+    w = max(w, int(24 + 7.6 * len(title)), int(24 + 6.0 * len(note)), x0 + 12 * len(RAMP) + 90)
+    h = top + len(layers) * (ph + row_gap) + 36 + (16 if note else 0)
+    out = _open(w, h, title)
+    for hd in range(nh):
+        px = x0 + hd * (pw + gap)
+        out.append(f'<text class="m" x="{px + pw / 2:.1f}" y="52" text-anchor="middle">head {hd + 1}</text>')
+        for j, k in enumerate(keys):
+            kx = px + cell * j + cell / 2 - 2
+            out.append(f'<text class="m" transform="translate({kx:.1f},{top - 6}) rotate(-45)">{html.escape(k)}</text>')
+    for s, la in enumerate(layers):
+        py = top + s * (ph + row_gap)
+        out.append(f'<text class="t" x="8" y="{py + ph / 2 + 5:.1f}" style="font-size:13px">{html.escape(la)}</text>')
+        for i, q in enumerate(queries):
+            out.append(f'<text x="{x0 - 6}" y="{py + cell * i + cell / 2 + 4:.1f}" text-anchor="end" '
+                       f'style="font-size:11px">{html.escape(q)}</text>')
+        for hd in range(heads[s]):
+            px = x0 + hd * (pw + gap)
+            for i, q in enumerate(queries):
+                for j, k in enumerate(keys):
+                    v = m[s, hd, i, j]
+                    x, y = px + cell * j, py + cell * i
+                    if not np.isfinite(v):
+                        out.append(f'<rect x="{x + 1}" y="{y + 1}" width="{cell - 2}" height="{cell - 2}" rx="2" '
+                                   f'fill="none" stroke="var(--grid)"><title>{html.escape(la)} head {hd + 1}: '
+                                   f'{html.escape(q)} is never there</title></rect>')
+                        continue
+                    col = _ramp(v / vmax)
+                    out.append(f'<rect x="{x + 1}" y="{y + 1}" width="{cell - 2}" height="{cell - 2}" rx="2" '
+                               f'fill="{col}"><title>{html.escape(la)} head {hd + 1}: {html.escape(q)} looks at '
+                               f'{html.escape(k)} {v:.1%}</title></rect>')
+                    pct = round(100 * v)
+                    if pct >= 1:
+                        out.append(f'<text x="{x + cell / 2:.1f}" y="{y + cell / 2 + 3.5:.1f}" text-anchor="middle" '
+                                   f'style="fill:{_ink_on(col)};font-size:{9 if cell < 22 else 10}px;'
+                                   f'pointer-events:none">{pct}</text>')
+    ly = top + len(layers) * (ph + row_gap) + 6
+    for step in range(len(RAMP)):
+        out.append(f'<rect x="{x0 + 12 * step}" y="{ly}" width="12" height="8" fill="{RAMP[step]}"/>')
+    out.append(f'<text class="m" x="{x0 - 6}" y="{ly + 8}" text-anchor="end">0%</text>')
+    out.append(f'<text class="m" x="{x0 + 12 * len(RAMP) + 6}" y="{ly + 8}">{vmax:.0%}{" or more" if vmax < 1 else ""}</text>')
+    if note:
+        out.append(f'<text class="m" x="16" y="{h - 10}">{html.escape(note)}</text>')
     out.append("</svg>")
     return "\n".join(out)
 

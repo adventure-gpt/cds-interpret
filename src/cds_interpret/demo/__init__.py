@@ -2,6 +2,7 @@
 
     import cds_interpret as ci
     policy = ci.demo.policy()                    # a small MLP (30 -> 64 -> 64 -> 90 actions), weights shipped here
+    policy = ci.demo.attention_policy()          # the same bot with an entity-attention block (3 tokens, 2 x 2 heads)
     moments = ci.demo.synthetic_moments()        # random game moments (no simulator needed)
     ci.demo.run("cds-demo")                      # the whole tour: probes, features, an edit, a report
 
@@ -14,6 +15,10 @@ goal, which side of the ball it is on, and where the ball is - and the tour chec
 Its observation, :func:`obs`, is built from the game state in the bot's team frame (it attacks +y): the ball (position
 / 4096, velocity / 2300), its own car (position, velocity, forward and up axes, boost / 100, on the ground, a flip
 left), the nearest opponent (position, velocity) and the ball relative to its car. 30 numbers.
+
+The attention demo bot, :func:`attention_policy`, learned the same scripted player from the same 30 numbers, cut into
+three tokens - its own car, the ball, the opponent - that two small transformer layers let look at each other
+(:class:`DemoAttentionNet`). It is there to try the attention-heads tools on (``cds-interpret attention --demo``).
 """
 
 from __future__ import annotations
@@ -34,6 +39,8 @@ from ..policy import Policy, lookup_table
 
 OBS_DIM = 30
 WEIGHTS = "demo_policy.pt"
+ATTENTION_WEIGHTS = "demo_attention.pt"
+TOKENS = ("own car", "ball", "opponent")
 
 
 class DemoNet(torch.nn.Module):
@@ -48,6 +55,35 @@ class DemoNet(torch.nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.head(self.body(x))
+
+
+class DemoAttentionNet(torch.nn.Module):
+    """The demo bot with an entity-attention block. The 30 inputs are cut into three tokens - ``own car`` (position,
+    velocity, forward and up axes, boost, on the ground, a flip left: 15 numbers), ``ball`` (position, velocity, and
+    where it is relative to the car: 9) and ``opponent`` (position, velocity: 6) - each embedded to ``d`` numbers by its
+    own Linear; ``layers`` transformer layers (``nn.TransformerEncoderLayer``, pre-norm, ``heads`` heads) let the
+    tokens look at each other, and the three tokens' outputs are read together into 90 action logits. Its attention
+    layers are ``layers.0`` and ``layers.1``."""
+
+    def __init__(self, d: int = 32, heads: int = 2, layers: int = 2, n_actions: int = 90):
+        super().__init__()
+        self.embed = torch.nn.ModuleList([torch.nn.Linear(15, d), torch.nn.Linear(9, d), torch.nn.Linear(6, d)])
+        self.layers = torch.nn.ModuleList([
+            torch.nn.TransformerEncoderLayer(d, heads, 2 * d, dropout=0.0, batch_first=True, norm_first=True)
+            for _ in range(layers)])
+        self.norm = torch.nn.LayerNorm(d)
+        self.head = torch.nn.Sequential(torch.nn.Linear(3 * d, 64), torch.nn.ReLU(), torch.nn.Linear(64, n_actions))
+
+    def tokens(self, x: torch.Tensor) -> torch.Tensor:
+        """The three tokens [N, 3, d] of inputs x [N, 30], in the order of TOKENS."""
+        parts = (x[:, 6:21], torch.cat([x[:, 0:6], x[:, 27:30]], 1), x[:, 21:27])
+        return torch.stack([e(p) for e, p in zip(self.embed, parts)], 1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        t = self.tokens(x)
+        for layer in self.layers:
+            t = layer(t)
+        return self.head(self.norm(t).flatten(1))
 
 
 def obs(frames: Frames, me: np.ndarray) -> np.ndarray:
@@ -142,8 +178,10 @@ def random_frames(n: int, rng: np.random.Generator, n_cars: int = 2) -> Frames:
                        car_has_flip=np.ones((n, n_cars), np.float32))
 
 
-def train(steps: int = 4000, n: int = 60_000, seed: int = 0, log: Callable[[str], Any] | None = None) -> DemoNet:
-    """Teach a fresh DemoNet to copy :func:`teacher` on random moments (cross-entropy on the nearest action)."""
+def train(steps: int = 4000, n: int = 60_000, seed: int = 0, log: Callable[[str], Any] | None = None,
+          attention: bool = False) -> torch.nn.Module:
+    """Teach a fresh DemoNet (``attention``: a DemoAttentionNet) to copy :func:`teacher` on random moments
+    (cross-entropy on the nearest action)."""
     rng = np.random.default_rng(seed)
     torch.manual_seed(seed)
     fr = random_frames(n, rng)
@@ -151,8 +189,8 @@ def train(steps: int = 4000, n: int = 60_000, seed: int = 0, log: Callable[[str]
     x = torch.from_numpy(obs(fr, me))
     table = lookup_table()
     y = torch.from_numpy(nearest_actions(teacher(fr, me), table))
-    net = DemoNet()
-    opt = torch.optim.Adam(net.parameters(), lr=2e-3)
+    net: torch.nn.Module = DemoAttentionNet() if attention else DemoNet()
+    opt = torch.optim.Adam(net.parameters(), lr=1e-3 if attention else 2e-3)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, steps)
     t0 = time.time()
     for step in range(1, steps + 1):
@@ -180,6 +218,43 @@ def policy(weights: str | os.PathLike[str] | None = None) -> Policy:
         state = torch.load(weights, map_location="cpu", weights_only=True)
     net.load_state_dict(state)
     return Policy(net.eval(), obs=obs, actions=lookup_table(), name="demo bot")
+
+
+def attention_policy(weights: str | os.PathLike[str] | None = None) -> Policy:
+    """The attention demo bot as a Policy (its shipped weights, or ``weights`` from train(attention=True)). Its tokens
+    are named by TOKENS: ``study.attention(tokens=ci.demo.TOKENS)``."""
+    net = DemoAttentionNet()
+    if weights is None:
+        ref = importlib.resources.files(__package__).joinpath(ATTENTION_WEIGHTS)
+        with importlib.resources.as_file(ref) as p:
+            state = torch.load(p, map_location="cpu", weights_only=True)
+    else:
+        state = torch.load(weights, map_location="cpu", weights_only=True)
+    net.load_state_dict(state)
+    return Policy(net.eval(), obs=obs, actions=lookup_table(), name="demo bot with attention")
+
+
+def demo_moments(policy: Policy, source: str = "auto", games: int = 12, seconds: float = 60.0,
+                 log: Callable[[str], Any] | None = print) -> Moments:
+    """Moments of a demo bot's play: recorded in RocketSim against a ball chaser when it and its meshes are there
+    (source "auto" or "rocketsim"), else random game moments (source "synthetic", or "auto" without RocketSim)."""
+    say = log or (lambda *_: None)
+    if source not in ("auto", "rocketsim", "synthetic"):
+        raise ValueError(f"source must be 'auto', 'rocketsim' or 'synthetic', not {source!r}")
+    if source in ("auto", "rocketsim"):
+        try:
+            from ..record import init_rocketsim, rocketsim
+            init_rocketsim()
+            say(f"Recording {games} games ({seconds:.0f} s each) against a ball chaser in RocketSim")
+            return rocketsim(policy, games=games, seconds=seconds, opponent="chaser", log=say)
+        except Exception as e:
+            if source == "rocketsim":
+                raise
+            say(f"RocketSim isn't ready here ({str(e).splitlines()[0]}) - using random game moments instead. To "
+                "record real games: pip install \"cds-interpret[rlgym]\" (see docs/howto/record-moments.md)")
+    m = synthetic_moments()
+    say(f"  {len(m)} random moments in {m.n_games} groups (good for a tour, not for findings)")
+    return m
 
 
 def synthetic_moments(n_games: int = 60, per_game: int = 60, seed: int = 1) -> Moments:

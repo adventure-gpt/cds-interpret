@@ -4,7 +4,7 @@
 
 The page is made of sections, each a function ``(study) -> html`` (empty to leave it out). Add your own - a new
 technique's results, say - with the decorator; they appear in ``order`` among the built-in ones (overview 0, probes
-10, steadiness 20, features 30, edits 40, extra 50, notes 90)::
+10, steadiness 20, features 30, edits 40, attribution 45, attention heads 47, extra 50, notes 90)::
 
     from cds_interpret.report import section
 
@@ -307,6 +307,45 @@ def _attribution(study: Any) -> str:
             f"<b>{_f(fa.get('Shapley'), '{:.2f}')}</b>, one entity swapped at a time "
             f"{_f(fa.get('one swapped at a time'), '{:.2f}')}, random {_f(fa.get('random'), '{:.2f}')} "
             f"({res['n']} held-out moments, {res['donors']} donors each).</p>")
+
+
+@section("What each attention head looks at", order=47)
+def _attention(study: Any) -> str:
+    maps = getattr(study, "attention_results", None)
+    if maps is None:
+        return ""
+    from .attention import figures
+    figs = figures(maps)
+    who = (f"the row of the <b>{html.escape(maps.query)}</b> token" if maps.query else
+           "the average row of every token that asks (every query)")
+    out = [f"<p class='lead'>An attention head lets each token of the network ask the others what they hold, and "
+           f"weighs their answers: these are those weights, per head, recomputed from each attention layer's own "
+           f"projections (softmax of queries times keys) on {len(maps.focus):,} recorded moments. What a head "
+           f"<i>looks at</i> is {who}. A head can look somewhere without the decision resting on it: test what matters "
+           "with edits.</p>",
+           "<ul class='lead'>" + "".join(f"<li>{html.escape(t)}</li>" for t in maps.describe().values()) + "</ul>",
+           f"<div class='figs scroll'>{figs['focus']}{figs['heads']}</div>"]
+    if "shifts" in figs:
+        out.append("<p class='lead'>How each head's attention moves with the situation: the share it gives each token "
+                   "where the situation holds against where it doesn't (every situation but kickoff compared within "
+                   "open play). <b>Points</b> are percentage points of the head's attention. A change is printed when "
+                   "its 95% interval, from resampling whole games, leaves 0 out.</p>")
+        out.append(f"<div class='figs scroll'>{figs['shifts']}</div>")
+        details = [v for k, v in figs.items() if k.startswith("shift: ")]
+        if details:
+            out.append(f"<div class='figs scroll'>{''.join(details)}</div>")
+    rows = []
+    for r in maps.table():
+        rows.append(f"<tr><td>{html.escape(r['head'])}</td><td><code>{html.escape(maps.paths.get(r['layer'], ''))}"
+                    f"</code></td><td class='n'>{_f(r['spread'], '{:.2f}')}</td>"
+                    f"<td class='n'>{_f(r['entropy'], '{:.2f}')}</td><td class='n'>{_f(r['selfish'], '{:.0%}')}</td></tr>")
+    out.append("<div class='scroll'><table class='data'><tr><th>head</th><th>module</th><th>spread (0 one token, 1 "
+               "even)</th><th>entropy (nats)</th><th>on itself</th></tr>" + "".join(rows) + "</table></div>")
+    skipped = {k: r["skipped"] for k, r in maps.shifts.items() if "skipped" in r and r["n_in"] and r["n_out"]}
+    if skipped:
+        out.append("<p class='lead'>Not compared: " + "; ".join(f"{html.escape(k)} ({html.escape(v)})"
+                                                                for k, v in skipped.items()) + ".</p>")
+    return "".join(out)
 
 
 @section("More", order=50)

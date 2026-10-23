@@ -9,6 +9,7 @@
     print(feats.summary())
     study.edits("body.3", {"no threat": study.probe_edit("body.3", "threat", 0.0)})   # does the policy use it?
     study.attribution()                           # what each decision rests on: ball, own car, opponents, team-mates
+    study.attention(tokens=["own car", "ball", "opponent"])   # what each attention head looks at, by situation
     study.report("report.html")                   # everything above on one page
 
 Everything is scored on games the probes and dictionaries never saw (``test_frac`` of the games).
@@ -352,7 +353,8 @@ class Study:
     Args:
         policy: a :class:`~cds_interpret.Policy`.
         moments: :class:`~cds_interpret.Moments` (recorded, or demo.synthetic_moments()).
-        layers: the module paths to study (default: every hidden layer after its nonlinearity).
+        layers: the module paths to study (default: every hidden layer after its nonlinearity; ``[]``: none, for
+            the techniques that read the whole network - attention heads, what decisions rest on).
         labels: the labels to probe (default: every label the moments have that can be probed).
         test_frac: the share of games held out for scoring.
         log: a function for progress lines (print by default; None for quiet).
@@ -381,8 +383,8 @@ class Study:
             raise ShapeError(f"Your network didn't accept these inputs ({self.x.shape[1]} numbers per moment). PyTorch "
                              f"said: {e}. Usually the moments were recorded with a different bot, or the obs function "
                              "builds a different layout than the network expects.") from e
-        self.layers = list(layers) if layers else policy.default_layers(self.x[:8])
-        if not self.layers:
+        self.layers = list(layers) if layers is not None else policy.default_layers(self.x[:8])
+        if not self.layers and layers is None:
             raise CDSInterpretError("No layers to study were found. Pass layers=[...]; policy.layers(x) lists them.")
         for layer in self.layers:
             self._check_layer(layer)
@@ -406,10 +408,11 @@ class Study:
         self.feature_checks: dict[tuple[str, int], FeatureCheck] = {}
         self.attribution_results: dict[str, Any] | None = None
         self.landing_results: dict[str, Any] | None = None
+        self.attention_results: Any = None
         self.extra_sections: dict[str, str] = {}
         self.log(f"Studying {policy.name} on {len(moments):,} moments from {moments.n_games} games "
                  f"({len(np.unique(self.games[self.test]))} games kept aside to score on). "
-                 f"Layers: {', '.join(self.layers)}")
+                 f"Layers: {', '.join(self.layers) or 'none'}")
 
     def __repr__(self) -> str:
         return (f"Study({self.policy.name!r}, {len(self.moments)} moments, {self.moments.n_games} games, "
@@ -736,6 +739,42 @@ class Study:
         res["faithfulness"] = {k: v["score_pooled"] for k, v in AT.faithfulness(kl, orders, average_donors=True).items()}
         self.attribution_results = res
         return res
+
+    # ---- attention heads
+    def attention(self, sites: Any = None, tokens: Any = None, query: str | None = None,
+                  forward: Callable[[torch.Tensor], Any] | None = None, situations: Any = None,
+                  min_moments: int = 50, min_games: int = 3, boot: int = 200, seed: int = 0) -> Any:
+        """What each attention head looks at (attention.py): every head's attention to each token, by name, averaged
+        over all the moments; how spread out it is; and the situations where it shifts most - kickoffs, the ball in
+        the air, an opponent close, defending, the yes / no labels - each with a 95% interval from resampling whole
+        games, and a sentence per head. ``sites``: None (every attention module the forward pass runs: L1, L2, ...),
+        {name: module path or attention.Site}; ``tokens``: a name per token (["own car", "ball", "opponent"]) or
+        attention.Tokens(names, roles=fn) for tokens whose order changes; ``query``: a query token whose row is what
+        a head "looks at" (default: the mean row of every query token); ``forward``: what to run (default the
+        policy; e.g. ``policy.value_fn`` for a critic's attention); ``situations``: None (attention.situations), a
+        list of their names, or {name: attention.Situation}. Returns attention.AttentionMaps, also kept as
+        ``attention_results`` (the report's section)."""
+        from . import attention as AT
+        fwd = forward or self.policy.forward
+        maps = AT.measure(self.policy.net, fwd, self.x, sites=sites, tokens=tokens, query=query, batch=self.batch,
+                          log=self.log)
+        maps.games = np.asarray(self.games)
+        if isinstance(situations, dict):
+            sits = situations
+        else:
+            sits = AT.situations(self.moments, {**self.moments.labels, **self.labels})
+            if situations is not None:
+                unknown = [k for k in situations if k not in sits]
+                if unknown:
+                    raise CDSInterpretError(f"No situation called {', '.join(map(repr, unknown))} here. These moments "
+                                            f"have: {', '.join(sits)}")
+                sits = {k: sits[k] for k in situations}
+        maps.shifts = AT.shift_stats(maps.focus, maps.games, sits, boot=boot, seed=seed, min_moments=min_moments,
+                                     min_games=min_games)
+        maps.meta.update({"policy": self.policy.name, "moments": int(len(self.x)), "games": int(self.moments.n_games),
+                          "source": self.moments.meta.get("source")})
+        self.attention_results = maps
+        return maps
 
     # ---- the overlay
     def make_pack(self, layer: str, features: dict[str, int] | None = None, probes: dict[str, Any] | None = None,

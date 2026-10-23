@@ -12,6 +12,7 @@ game, while the bot plays.
     study = ci.Study(policy, moments)
     print(study.probes().summary())                           # what each layer knows, against baselines
     study.features("mlp.3")                                   # a sparse autoencoder's features of a layer
+    study.attention(tokens=["own car", "ball", "opponent"])   # what each attention head looks at
     study.report("report.html")
 
 Three tiers, by what you have of the bot - every tier works for any bot:
@@ -26,6 +27,7 @@ Start with docs/quickstart.md.
 
 from . import (
     analysis,
+    attention,
     behavior,
     curriculum,
     demo,
@@ -72,6 +74,7 @@ __all__ = [
     "Tracks",
     "__version__",
     "analysis",
+    "attention",
     "behavior",
     "concept_labels",
     "curriculum",

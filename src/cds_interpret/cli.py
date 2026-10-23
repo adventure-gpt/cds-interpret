@@ -1,5 +1,5 @@
-"""The command line: ``cds-interpret demo`` (the whole tour on the demo bot) and ``cds-interpret doctor`` (what is
-installed and ready)."""
+"""The command line: ``cds-interpret demo`` (the whole tour on the demo bot), ``cds-interpret doctor`` (what is
+installed and ready), ``cds-interpret attention`` (what each attention head looks at) and the panel tools."""
 
 from __future__ import annotations
 
@@ -62,6 +62,62 @@ def doctor(log: Any = print) -> dict[str, Any]:
     return out
 
 
+def attention_cmd(args: Any, log: Any = print) -> int:
+    """``cds-interpret attention``: a policy's attention heads on a recording - the summary printed, and in the
+    output folder the page (attention.html), the numbers (attention.json) and every figure (.svg)."""
+    from pathlib import Path
+
+    import numpy as np
+
+    from . import _specs, demo
+    from . import attention as AT
+    from .errors import CDSInterpretError
+    from .moments import Moments
+    from .study import Study
+    from .viz import plots
+    if args.demo:
+        policy = demo.attention_policy()
+        tokens: Any = list(demo.TOKENS) if args.tokens is None else None
+        log("The attention demo bot copies a simple scripted player through two small transformer layers over three "
+            "tokens: its own car, the ball and the opponent. Let's see what each head looks at.")
+        log("")
+        moments = demo.demo_moments(policy, args.source, args.games, args.seconds, log=log)
+    else:
+        if not args.policy or not args.moments:
+            raise CDSInterpretError("cds-interpret attention needs a recording and your policy: cds-interpret "
+                                    "attention recordings/my-bot --policy my_bot:policy --tokens \"own car,ball,"
+                                    "opponent\" (or try it on the demo bot: cds-interpret attention --demo)")
+        policy = _specs.build(args.policy, "policy")
+        root = Path(args.moments)
+        moments = Moments.load(root) if (root / "manifest.json").exists() else Moments.load_all(root)
+        tokens = None
+    if args.tokens is not None:
+        spec = args.tokens.strip()
+        tokens = _specs.build(spec, "tokens") if ":" in spec and "," not in spec else spec
+    if args.max_moments and len(moments) > args.max_moments:
+        rows = np.sort(np.random.default_rng(0).choice(len(moments), args.max_moments, replace=False))
+        moments = moments.take(rows)
+    sites = _specs.build(args.sites, "sites") if args.sites else None
+    forward = None
+    if args.critic:
+        if policy.value_fn is None:
+            raise CDSInterpretError("--critic needs a policy with a critic: ci.Policy(..., value=my_critic)")
+        forward = policy.value_fn
+    study = Study(policy, moments, layers=[], log=lambda m: log("  " + m.strip()))
+    maps = study.attention(sites=sites, tokens=tokens, query=args.query, forward=forward)
+    log("")
+    log(maps.summary())
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    for name, svg in AT.figures(maps).items():
+        plots.save(svg, out / f"{name.replace('shift: ', 'shift_').replace(' ', '_')}.svg")
+    maps.save(out / "attention.json")
+    page = study.report(out / "attention.html", title=f"The attention heads of {policy.name}")
+    log("")
+    log(f"The page with every map and shift is {page}; the numbers are in {out / 'attention.json'}.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="cds-interpret", description="Look inside any PyTorch Rocket League bot.")
     sub = ap.add_subparsers(dest="cmd")
@@ -100,6 +156,25 @@ def main(argv: list[str] | None = None) -> int:
     rf.add_argument("--min-r", type=float, default=0.5, help="how closely a new feature must fire with an old one "
                                                              "to take its name (default 0.5)")
     rf.add_argument("--threads", type=int, default=2, help="CPU threads for torch (default 2)")
+    at = sub.add_parser("attention", help="what each attention head of a network looks at, by token and situation")
+    at.add_argument("moments", nargs="?", help="a recording of your bot (a folder; one with several recordings works too)")
+    at.add_argument("--policy", help="\"package.module:factory\" returning your cds_interpret.Policy")
+    at.add_argument("--demo", action="store_true", help="the attention demo bot, on games it plays (or random moments)")
+    at.add_argument("--tokens", help="the tokens' names, in order (\"own car,ball,opponent\"), or "
+                                     "\"package.module:factory\" returning them (a list, or attention.Tokens)")
+    at.add_argument("--sites", help="\"package.module:factory\" returning the attention layers to read ({name: path or "
+                                    "attention.Site}); default: every attention module the network runs")
+    at.add_argument("--query", help="read each head's row for this query token only (default: every token's, averaged)")
+    at.add_argument("--critic", action="store_true", help="the critic's attention: run the policy's value function")
+    at.add_argument("--out", default="cds-attention", help="the folder for the page, figures and numbers "
+                                                           "(default: cds-attention)")
+    at.add_argument("--max-moments", type=int, default=0, help="study at most this many moments, drawn at random "
+                                                               "(default: all)")
+    at.add_argument("--source", choices=("auto", "rocketsim", "synthetic"), default="auto",
+                    help="--demo: where its moments come from (auto: RocketSim when it is ready, else synthetic)")
+    at.add_argument("--games", type=int, default=12, help="--demo: games to record in RocketSim (default 12)")
+    at.add_argument("--seconds", type=float, default=60.0, help="--demo: seconds per game (default 60)")
+    at.add_argument("--threads", type=int, default=2, help="CPU threads for torch (default 2)")
     ap.add_argument("--version", action="store_true", help="print the version")
     args = ap.parse_args(argv)
     if args.version:
@@ -170,6 +245,15 @@ def main(argv: list[str] | None = None) -> int:
             print(e)
             return 1
         return 0
+    if args.cmd == "attention":
+        import torch
+        torch.set_num_threads(max(1, args.threads))
+        from .errors import CDSInterpretError
+        try:
+            return attention_cmd(args)
+        except CDSInterpretError as e:
+            print(e)
+            return 1
     if args.cmd == "demo":
         import torch
         torch.set_num_threads(max(1, args.threads))
