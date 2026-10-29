@@ -229,7 +229,7 @@ def mutual_info(a: np.ndarray, b: np.ndarray) -> float:
     pa, pb = joint.sum(1, keepdims=True), joint.sum(0, keepdims=True)
     with np.errstate(divide="ignore", invalid="ignore"):
         t = np.where(joint > 0, joint * np.log2(joint / (pa * pb)), 0.0)
-    return float(max(t.sum(), 0.0))
+    return max(float(t.sum()), 0.0)
 
 
 def mutual_info_soft(probs: np.ndarray, codes: np.ndarray) -> float:
@@ -316,15 +316,19 @@ def meaning(sent: np.ndarray, labels: dict[str, np.ndarray], probs: np.ndarray |
             base.append(mutual_info(sent, sh))
             if probs is not None:
                 base_soft.append(mutual_info_soft(probs, sh))
-        base_a = np.asarray(base)
-        row = {"levels": levels, "entropy": h_lab, "mi": mi, "baseline": float(base_a.mean()),
-               "baseline_max": float(base_a.max()), "excess": mi - float(base_a.mean()),
-               "beats": bool(mi > base_a.max()) if shuffles else False}
-        row["share"] = row["excess"] / h_lab if h_lab > 0 else float("nan")
+        base_a = np.asarray(base, dtype=np.float64)
+        b_mean = float(np.mean(base_a)) if base_a.size else float("nan")
+        b_max = float(np.max(base_a)) if base_a.size else float("nan")
+        excess = mi - b_mean
+        row = {"levels": levels, "entropy": h_lab, "mi": mi, "baseline": b_mean, "baseline_max": b_max,
+               "excess": excess, "beats": bool(mi > b_max) if shuffles else False,
+               "share": excess / h_lab if h_lab > 0 else float("nan")}
         if probs is not None:
-            bs = np.asarray(base_soft)
-            row.update({"mi_soft": mi_soft, "baseline_soft": float(bs.mean()), "baseline_soft_max": float(bs.max()),
-                        "excess_soft": mi_soft - float(bs.mean()), "beats_soft": bool(mi_soft > bs.max())})
+            bs = np.asarray(base_soft, dtype=np.float64)
+            s_mean = float(np.mean(bs)) if bs.size else float("nan")
+            s_max = float(np.max(bs)) if bs.size else float("nan")
+            row.update({"mi_soft": mi_soft, "baseline_soft": s_mean, "baseline_soft_max": s_max,
+                        "excess_soft": mi_soft - s_mean, "beats_soft": bool(mi_soft > s_max) if shuffles else False})
         out["labels"][name] = row
         lift_rows[name] = {"codes": codes, "levels": levels}
     out["levels"] = {name: r["levels"] for name, r in lift_rows.items()}
