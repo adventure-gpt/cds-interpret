@@ -21,6 +21,7 @@ dark following the reader's system. It shows what the study has computed so far:
 | Edits | each edit's KL, share of changed actions, total variation |
 | What decisions rest on | each entity's Shapley share of the decisions, by situation, and how faithful the ranking is |
 | What each attention head looks at | a sentence per head, what each head looks at, every head's map, the shifts by situation and each token's change in the biggest ones, each head's spread ([guide](attention-heads.md)) |
+| Message channel | the three answers in words, how often each symbol is sent, what the sent symbol tells about each label (bits above the time-shifted baseline), how often a team-mate's chosen action changes with another symbol or silence, and a phrase per symbol ([guide](message-channel.md)) |
 | More | anything you put in `study.extra_sections` (`{title: html}`) |
 | Reading this page well | the four habits |
 

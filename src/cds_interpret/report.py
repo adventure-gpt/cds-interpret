@@ -4,7 +4,7 @@
 
 The page is made of sections, each a function ``(study) -> html`` (empty to leave it out). Add your own - a new
 technique's results, say - with the decorator; they appear in ``order`` among the built-in ones (overview 0, probes
-10, steadiness 20, features 30, edits 40, attribution 45, attention heads 47, extra 50, notes 90)::
+10, steadiness 20, features 30, edits 40, attribution 45, attention heads 47, message channel 48, extra 50, notes 90)::
 
     from cds_interpret.report import section
 
@@ -345,6 +345,30 @@ def _attention(study: Any) -> str:
     if skipped:
         out.append("<p class='lead'>Not compared: " + "; ".join(f"{html.escape(k)} ({html.escape(v)})"
                                                                 for k, v in skipped.items()) + ".</p>")
+    return "".join(out)
+
+
+@section("Message channel", order=48)
+def _messages(study: Any) -> str:
+    rep = getattr(study, "message_results", None)
+    if rep is None:
+        return ""
+    figs = rep.figures()
+    out = ["<p class='lead'>Each car's network also sends one of "
+           f"{rep.usage['symbols']} symbols every decision, and its team-mates read it at their next one. Three "
+           "questions: which symbols get sent, what they say about the situation (mutual information with each label, "
+           "in bits, against the same label shifted in time), and whether the team-mates' play depends on them (their "
+           "action distribution with the real symbol against every other symbol and against silence).</p>",
+           "<ul class='lead'>" + "".join(f"<li><b>{html.escape(k.capitalize())}.</b> {html.escape(v)}</li>"
+                                         for k, v in rep.verdicts.items()) + "</ul>",
+           f"<div class='figs scroll'>{''.join(figs.values())}</div>"]
+    rows = []
+    for s_, ph in rep.phrases("sent").items():
+        rows.append(f"<tr><td class='n'>{s_}</td><td class='n'>{_f(rep.usage['share_sent'][s_], '{:.1%}')}</td>"
+                    f"<td class='n'>{_f(rep.usage['mean_prob'][s_], '{:.1%}')}</td><td>{html.escape(ph)}</td></tr>")
+    if rows:
+        out.append("<div class='scroll'><table class='data'><tr><th>symbol</th><th>sent</th><th>mean probability</th>"
+                   "<th>when (as sent)</th></tr>" + "".join(rows) + "</table></div>")
     return "".join(out)
 
 

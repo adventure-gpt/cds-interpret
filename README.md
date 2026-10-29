@@ -126,6 +126,10 @@ network saw. The [quickstart](docs/quickstart.md) walks through both ways, step 
   and opponents: each head's map, what it watches, and how that shifts at kickoffs, with the ball in the air, with
   an opponent close - with a sentence per head. Works with fused attention kernels too.
   [What each attention head looks at](docs/howto/attention-heads.md).
+- **Decode a team-mate message channel.** For team bots that learned to send each other symbols: which symbols get
+  sent, a sentence for each ("sent mostly when closest to the ball, especially if the ball is in our half"), and the
+  test that decides whether it is really a message - whether team-mates play differently with another symbol.
+  [Decode a team-mate message channel](docs/howto/message-channel.md).
 - **See what a decision rests on.** Was it the ball, its own car or the opponent? Which of its ideas tipped it?
   Shapley values - a fair way of splitting credit between things that act together - say, with a score for how far
   to trust the answer.
@@ -153,6 +157,7 @@ network saw. The [quickstart](docs/quickstart.md) walks through both ways, step 
 | [Test what it relies on](docs/howto/causal-tests.md) | switching ideas off and up, in moments and in games |
 | [See what a decision rests on](docs/howto/what-decisions-rest-on.md) | the ball, its car, the opponents; and what each feature does |
 | [What each attention head looks at](docs/howto/attention-heads.md) | per-head attention maps by token, and how they shift with the situation |
+| [Decode a team-mate message channel](docs/howto/message-channel.md) | what learned symbols say, and whether team-mates listen |
 | [Check your tools](docs/howto/check-your-tools.md) | how to tell when a technique is misleading you |
 | [Watch it think in RLBot](docs/howto/overlay.md) | the live thoughts overlay |
 | [Why this move, and what it's looking at](docs/howto/why-and-looking.md) | the panel's two rows about each decision: how to read them, what they cost |

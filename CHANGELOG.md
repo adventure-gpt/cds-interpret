@@ -3,6 +3,31 @@
 All notable changes to cds-interpret are written down here. The project follows
 [Semantic Versioning](https://semver.org); before 1.0, minor versions may change the API (each change is listed).
 
+## [0.8.0] - 2026-10-29
+
+### Added
+
+- **Decode a team-mate message channel.** For team bots whose network also sends one of K symbols every decision for
+  its team-mates to read: `study.messages(logits=..., channel=...)` (or `cds_interpret.messages.analyze`) answers
+  three questions. **Usage**: the share of each symbol, the entropy of each decision's message distribution and of
+  the symbols sent (bits), and what a symbol drawn from the distribution says about its moment. **Meaning**: the
+  mutual information between the symbol and every label, against 20 copies of the label shifted in time within each
+  car's game (a baseline that keeps the label's rhythm), and a phrase per symbol from the situations it is sent in
+  more often than usual - the strongest, then the one that adds most among those moments ("sent mostly when the ball
+  is in its own half (1.9x as often), especially if it is its team's closest car to the ball too (2.0x)").
+  **Listening**, the decisive test: every receiver's action distribution with the symbol it got against each other
+  symbol and against silence - KL in bits and how often the chosen action changes - with reference edits to
+  compare with; every version of a moment goes through the network in one batch, so rounding can't fake a change.
+  The answers come in plain words, as `messages.MessageReport` (`summary()`, `phrases()`, `label_table()`,
+  `figures()`, `to_dict()`, `save()`), and the study page gets a "Message channel" section. Guide:
+  docs/howto/message-channel.md.
+- `messages.Channel(symbols, columns, live=None)`: where each team-mate's symbol sits in the network's input (read
+  with `incoming`, written with `put`).
+- `messages.situations(frames, me)`: three labels messages often speak of - `closest` (its team's closest car to the
+  ball), `ball_half` (the ball in the opponents' half) and `mate_dist` (distance to the nearest team-mate).
+- `ci.demo.message_team()`: a toy 2v2 team that talks (4 symbols with a known meaning) and listens - or, with
+  `listens=False`, gets the symbols and ignores them - to try the tool on in seconds.
+
 ## [0.7.0] - 2026-10-23
 
 ### Added

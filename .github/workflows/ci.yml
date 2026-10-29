@@ -73,5 +73,6 @@ jobs:
           test -s /tmp/demo/report.html
           /tmp/fresh/bin/cds-interpret attention --demo --source synthetic --out /tmp/attention
           test -s /tmp/attention/attention.html
+          /tmp/fresh/bin/python -c "import cds_interpret as ci; t = ci.demo.message_team(n_games=8); r = ci.Study(t.policy, t.moments, layers=[], log=None).messages(logits=t.logits, channel=t.channel, shuffles=3); assert r.verdicts['listening'].startswith('Yes')"
           /tmp/fresh/bin/cds-interpret panel /tmp/panel.toml
           test -s /tmp/panel.toml

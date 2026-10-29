@@ -10,6 +10,7 @@
     study.edits("body.3", {"no threat": study.probe_edit("body.3", "threat", 0.0)})   # does the policy use it?
     study.attribution()                           # what each decision rests on: ball, own car, opponents, team-mates
     study.attention(tokens=["own car", "ball", "opponent"])   # what each attention head looks at, by situation
+    study.messages(logits=msg_logits, channel=chan)   # a team-mate message channel: usage, meaning, who listens
     study.report("report.html")                   # everything above on one page
 
 Everything is scored on games the probes and dictionaries never saw (``test_frac`` of the games).
@@ -409,6 +410,7 @@ class Study:
         self.attribution_results: dict[str, Any] | None = None
         self.landing_results: dict[str, Any] | None = None
         self.attention_results: Any = None
+        self.message_results: Any = None
         self.extra_sections: dict[str, str] = {}
         self.log(f"Studying {policy.name} on {len(moments):,} moments from {moments.n_games} games "
                  f"({len(np.unique(self.games[self.test]))} games kept aside to score on). "
@@ -775,6 +777,53 @@ class Study:
                           "source": self.moments.meta.get("source")})
         self.attention_results = maps
         return maps
+
+    # ---- a team-mate message channel
+    def messages(self, logits: Any, channel: Any = None, labels: list[str] | None = None, sent: Any = None,
+                 references: dict[str, Callable] | None = None, shuffles: int = 20, bins: int = 4,
+                 max_listen: int | None = 20000, seed: int = 0) -> Any:
+        """What a learned team-mate message channel says and whether anyone listens (messages.py): which symbols are
+        sent and how sure each decision is, how much each symbol tells about every label (against time-shifted
+        copies) with a phrase per symbol, and - with ``channel`` (messages.Channel: where each team-mate's symbol
+        sits in the input) - how much the receivers' action distribution and chosen action move when their incoming
+        symbol is swapped or silenced.
+
+        ``logits``: the message logits of these moments, [N, K] (an array, or ``fn(inputs) -> [N, K]`` run on the
+        study's inputs); ``labels``: which to relate (default every label the moments have, plus the message
+        situations ``closest``, ``ball_half`` and ``mate_dist``); ``sent``: the symbols played (default the argmax);
+        ``references``: other edits to compare the listening with (messages.listen). Returns
+        messages.MessageReport, also kept as ``message_results`` (the report's section)."""
+        from . import messages as MSG
+        if callable(logits):
+            with torch.no_grad():
+                lg = torch.cat([torch.as_tensor(logits(self.x[a:a + self.batch])).float().cpu()
+                                for a in range(0, len(self.x), self.batch)])
+        else:
+            lg = torch.as_tensor(np.asarray(logits, np.float32))
+        if lg.ndim != 2 or len(lg) != len(self.x):
+            raise ShapeError(f"The message logits should be [moments, symbols] = [{len(self.x)}, K]; got "
+                             f"{tuple(lg.shape)}.")
+        labs = {**MSG.situations(self.moments.frames, self.moments.me), **self.moments.labels}
+        if labels is not None:
+            for k in labels:
+                _check_label(k, labs)
+            labs = {k: labs[k] for k in labels}
+        labs = {k: np.asarray(v, np.float32) for k, v in labs.items() if np.asarray(v).ndim == 1}
+        kinds = {**{k: LABEL_KIND[k] for k in labs if k in LABEL_KIND}, **{k: v for k, v in MSG.KINDS.items() if k in labs}}
+        forward = None
+        if channel is not None:
+            if not self.policy.discrete:
+                raise CDSInterpretError("The listening test compares action distributions: it needs a policy with "
+                                        "discrete actions (output 'logits' or 'probs').")
+            forward = self.policy.log_probs
+        rep = MSG.analyze(lg, labels=labs, kinds=kinds, games=self.games, seq=self.moments.seq,
+                          order=self.moments.step, sent=sent, x=self.x if channel is not None else None,
+                          forward=forward, channel=channel, references=references, bins=bins, shuffles=shuffles,
+                          seed=seed, batch=self.batch, max_listen=max_listen,
+                          meta={"policy": self.policy.name, "games": int(self.moments.n_games)})
+        self.message_results = rep
+        self.log(rep.summary())
+        return rep
 
     # ---- the overlay
     def make_pack(self, layer: str, features: dict[str, int] | None = None, probes: dict[str, Any] | None = None,

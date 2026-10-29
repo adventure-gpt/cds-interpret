@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 250" width="600" height="250" role="img" aria-label="A team-mate message channel: one car sends a symbol, its team-mate reads it; three questions - usage, meaning, listening">
+<style>svg{--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--s0:#2a78d6;--s1:#eb6834;--s2:#1baf7a;--s3:#eda100;}@media (prefers-color-scheme: dark){svg{--surface:#1a1a19;--ink:#ffffff;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--s0:#3987e5;--s1:#d95926;--s2:#199e70;--s3:#c98500;}}text{font-family:system-ui, -apple-system, "Segoe UI", sans-serif;fill:var(--ink2);font-size:12px} .t{fill:var(--ink);font-size:14px;font-weight:600} .b{fill:var(--ink);font-size:13px;font-weight:600} .m{fill:var(--muted);font-size:11px} .n{fill:var(--surface);font-size:13px;font-weight:700}</style>
+<rect width="600" height="250" fill="var(--surface)"/>
+<text class="t" x="16" y="26">A team-mate message channel, and the three questions</text>
+<rect x="24" y="52" width="150" height="62" rx="10" fill="none" stroke="var(--s0)" stroke-width="2"/>
+<text class="b" x="99" y="77" text-anchor="middle">car A decides</text>
+<text class="m" x="99" y="96" text-anchor="middle">an action, and a symbol</text>
+<rect x="426" y="52" width="150" height="62" rx="10" fill="none" stroke="var(--s2)" stroke-width="2"/>
+<text class="b" x="501" y="77" text-anchor="middle">team-mate B</text>
+<text class="m" x="501" y="96" text-anchor="middle">reads it next decision</text>
+<line x1="178" y1="83" x2="414" y2="83" stroke="var(--axis)" stroke-width="2"/>
+<path d="M414 77 L424 83 L414 89 Z" fill="var(--axis)"/>
+<circle cx="300" cy="83" r="17" fill="var(--s1)"/>
+<text class="n" x="300" y="88" text-anchor="middle">5</text>
+<text class="m" x="300" y="122" text-anchor="middle">one of K symbols, every decision</text>
+<circle cx="40" cy="158" r="11" fill="var(--s0)"/><text class="n" x="40" y="162" text-anchor="middle">1</text>
+<text class="b" x="58" y="162">Usage</text>
+<text x="58" y="180">which symbols get sent, and how sure</text>
+<text x="58" y="196">each decision is (entropy, in bits)</text>
+<circle cx="230" cy="158" r="11" fill="var(--s1)"/><text class="n" x="230" y="162" text-anchor="middle">2</text>
+<text class="b" x="248" y="162">Meaning</text>
+<text x="248" y="180">when is each symbol sent? ("mostly</text>
+<text x="248" y="196">when closest to the ball ...")</text>
+<circle cx="420" cy="158" r="11" fill="var(--s2)"/><text class="n" x="420" y="162" text-anchor="middle">3</text>
+<text class="b" x="438" y="162">Listening</text>
+<text x="438" y="180">does B play differently with</text>
+<text x="438" y="196">another symbol, or silence?</text>
+<text class="m" x="16" y="232">Meaning without listening is not communication: question 3 decides.</text>
+</svg>

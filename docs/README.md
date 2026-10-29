@@ -16,6 +16,8 @@ New here? Start with the **[quickstart](quickstart.md)**: five minutes on the bu
   feature makes the bot do
 - [What each attention head looks at](howto/attention-heads.md) - per-head attention maps by token name, how they
   shift with the situation, and reading your own attention modules (fused kernels too)
+- [Decode a team-mate message channel](howto/message-channel.md) - which symbols a team bot sends, what each one
+  says, and whether its team-mates listen
 - [Check your tools](howto/check-your-tools.md) - dictionaries true to the bot's choices and found again, probes the
   bot really uses, gauges whose numbers mean what they say
 - [Watch it think in RLBot](howto/overlay.md) - the live thoughts overlay

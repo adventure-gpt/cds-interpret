@@ -127,6 +127,15 @@ decision. Those shares are numbers you can average over recorded moments and com
 watches the ball, which one turns to an opponent when it comes close. They say where a head looks, not what the
 decision rests on - that takes an edit. [What each attention head looks at](howto/attention-heads.md).
 
+## A message channel: what team-mates tell each other
+
+Some team bots send each other **symbols**: every decision, a car's network picks one of a few, and its team-mates
+read it at their next decision. What a symbol means is whatever training made of it. Two things decide whether it is
+a message. First, the symbol has to go with the situation: the **mutual information** between symbol and situation,
+in bits, has to beat the same label shifted in time. Second, and this decides it, a team-mate has to play differently
+when it gets another symbol or none. A symbol can follow the game closely and still be ignored.
+[Decode a team-mate message channel](howto/message-channel.md).
+
 ## The live overlay
 
 The overlay is the same machinery, live. A small **pack** file says which features and probes to read from which

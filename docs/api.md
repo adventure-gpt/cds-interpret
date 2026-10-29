@@ -135,6 +135,7 @@ layers, for the techniques that read the whole network (attention heads, what de
 | `why_not(label)` | why a label has no probe, in words (None if it can have one) |
 | `attribution(n=400, donors=4, pool=4000, by_labels=(...), seed=0)` | what decisions rest on, by entity: `{"shares": {situation: {entity: share}}, "faithfulness", ...}` ([how-to](howto/what-decisions-rest-on.md)) |
 | `attention(sites=None, tokens=None, query=None, forward=None, situations=None, min_moments=50, min_games=3, boot=200, seed=0)` | `attention.AttentionMaps`: what each attention head looks at, by token, and how it shifts by situation; kept as `attention_results` ([how-to](howto/attention-heads.md)) |
+| `messages(logits, channel=None, labels=None, sent=None, references=None, shuffles=20, bins=4, max_listen=20000, seed=0)` | `messages.MessageReport`: a team-mate message channel's usage, meaning and listening; `logits` an array [N, K] or `fn(inputs)`; kept as `message_results` ([how-to](howto/message-channel.md)) |
 | `report(path="report.html", title=None)` | the path of the HTML page |
 | `activations(layer)`, `x`, `labels`, `kinds`, `games`, `train`, `test`, `layers`, `extra_sections` | |
 
@@ -192,6 +193,25 @@ K key tokens, S attention layers, R token names (roles).
 `focus` [N, S, H, R], `entropy`, `spread`, `selfish` [N, S, H], `present` [N, R]; `games`, `query`, `shifts`;
 `head_names`, `mean(where=None)`, `focus_mean(where=None)`, `table()`, `top_shifts(s, h, n=3)`, `describe()` (a
 sentence per head), `summary()`, `to_dict()`, `save(path)` (JSON).
+
+## Message channel
+
+`cds_interpret.messages` - [how-to](howto/message-channel.md). K symbols; bits throughout (KL too).
+
+| | |
+|---|---|
+| `Channel(symbols, columns, silence=0.0, live=None)` | where each team-mate's symbol sits in the input: `columns` one list of K indices per sender slot; `incoming(x)` -> [N, slots] (-1 silent), `put(x, slot, symbol or None)` |
+| `usage(probs, sent)` | `share_sent`, `mean_prob`, `entropy_per_decision`, `entropy_sent`, `entropy_mean_prob`, `info_sampled`, `max_bits`, `top_prob` |
+| `meaning(sent, labels, probs=None, kinds=None, games=None, order=None, seq=None, bins=4, shuffles=20, seed=0, min_moments=30, min_lift=1.25, min_share=0.1)` | per label `mi`, `baseline`, `baseline_max`, `excess`, `beats`, `share` (and `*_soft` with `probs`); per symbol (`"sent"`, `"soft"`) its lifts and `phrase` |
+| `listen(forward, x, channel, batch=4096, references=None)` | one row per (moment, live slot): `moment`, `slot`, `real`, `kl` [K + 1], `changed` [K + 1] (K symbols, then silence), `noise`, `kl_<ref>` / `changed_<ref>` |
+| `listening(rows, symbols, share_sent=None)` | `kl_swap`, `changed_swap`, `kl_swap_max`, `changed_any`, `kl_silence`, `changed_silence`, `kl_swap_natural`, `changed_swap_natural`, `kl_matrix` [real, other], `noise_max`, `references` |
+| `verdicts(usage, meaning, listening)` | the three answers in words (thresholds `MIN_BITS`, `LISTEN_CHANGE`, `BARELY_CHANGE`, `LISTEN_KL`, `BARELY_KL`) |
+| `analyze(logits, labels=None, games=None, sent=None, order=None, seq=None, kinds=None, x=None, forward=None, channel=None, references=None, bins=4, shuffles=20, seed=0, batch=4096, max_listen=20000)` | `MessageReport` |
+| `situations(frames, me)` | the extra labels `closest`, `ball_half`, `mate_dist` |
+| `entropy_bits`, `softmax`, `discretize`, `mutual_info`, `mutual_info_soft`, `lifts`, `symbol_phrase`, `phrase`, `PHRASES` | the parts |
+
+**`MessageReport`**: `usage`, `meaning`, `listening`, `verdicts`, `meta`; `summary(top=8)`, `phrases(which="sent")`,
+`label_table()`, `figures()` (`usage`, `meaning`, `listening` SVGs), `to_dict()`, `save(path)` (JSON).
 
 ## Probes
 
@@ -396,7 +416,9 @@ functions. `cds_interpret.overlay.team`: `check_follow`, `check_landing_for`, `c
 ## The demo bot
 
 `cds_interpret.demo`: `policy(weights=None)`, `attention_policy(weights=None)` (the same bot with an entity-attention
-block; its tokens are `TOKENS`), `synthetic_moments(n_games=60, per_game=60, seed=1)`, `demo_moments(policy, source,
+block; its tokens are `TOKENS`), `message_team(n_games=40, per_game=150, listens=True, noise=1.0, seed=0)` (a toy
+2v2 team that talks: `moments`, `logits`, `policy`, `channel`, `rule`; `MessageNet`),
+`synthetic_moments(n_games=60, per_game=60, seed=1)`, `demo_moments(policy, source,
 games, seconds)`, `run(out, source, games, seconds)`, `obs(frames, me)`, `teacher(frames, me)`, `DemoNet`,
 `DemoAttentionNet`, `train(steps, n, seed, attention=False)`, `random_frames(n, rng)`, `nearest_actions(controls, table)`.
 

@@ -13,6 +13,7 @@ game, while the bot plays.
     print(study.probes().summary())                           # what each layer knows, against baselines
     study.features("mlp.3")                                   # a sparse autoencoder's features of a layer
     study.attention(tokens=["own car", "ball", "opponent"])   # what each attention head looks at
+    study.messages(logits=msg_logits, channel=channel)        # a team-mate message channel: meaning, listening
     study.report("report.html")
 
 Three tiers, by what you have of the bot - every tier works for any bot:
@@ -36,6 +37,7 @@ from . import (
     hooks,
     intervene,
     labels,
+    messages,
     names,
     overlay,
     probes,
@@ -93,6 +95,7 @@ __all__ = [
     "labels",
     "list_layers",
     "lookup_table",
+    "messages",
     "names",
     "overlay",
     "probes",

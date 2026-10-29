@@ -4,6 +4,7 @@
     policy = ci.demo.policy()                    # a small MLP (30 -> 64 -> 64 -> 90 actions), weights shipped here
     policy = ci.demo.attention_policy()          # the same bot with an entity-attention block (3 tokens, 2 x 2 heads)
     moments = ci.demo.synthetic_moments()        # random game moments (no simulator needed)
+    team = ci.demo.message_team()                # a toy team that talks (4 symbols) and listens - or listens=False
     ci.demo.run("cds-demo")                      # the whole tour: probes, features, an edit, a report
 
 The demo bot was taught (by imitation, ``scripts/train_demo_policy.py``) to copy a simple scripted player,
@@ -268,6 +269,84 @@ def synthetic_moments(n_games: int = 60, per_game: int = 60, seed: int = 1) -> M
     m = Moments(fr, me, np.repeat(np.arange(n_games), per_game), np.tile(np.arange(per_game), n_games),
                 meta={"source": "synthetic", "seed": seed})
     return m.with_labels()
+
+
+# ------------------------------------------------------------------------------------------- the talking toy team
+MESSAGE_RULE = ("closest, ball in their half", "closest, ball in our half", "a team-mate is closer, I'm last back",
+                "a team-mate is closer, I'm up-field")
+"""What each symbol of the toy team's message means (message_team): the sender's situation."""
+
+
+class MessageNet(torch.nn.Module):
+    """The toy team's receiver: 8 numbers about its own situation and its team-mate's symbol (a one-hot of 4) -> 6
+    action logits. With ``listens`` each symbol pushes one action up (symbol s: action s + 2); without, the symbol's
+    weights are zero and the team-mate's message changes nothing."""
+
+    def __init__(self, listens: bool = True, seed: int = 0):
+        super().__init__()
+        g = torch.Generator().manual_seed(seed)
+        self.own = torch.nn.Linear(8, 6)
+        self.msg = torch.nn.Linear(4, 6, bias=False)
+        with torch.no_grad():
+            self.own.weight.copy_(torch.randn(6, 8, generator=g))
+            self.own.bias.zero_()
+            self.msg.weight.zero_()
+            if listens:
+                for sym in range(4):
+                    self.msg.weight[sym + 2, sym] = 3.0
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.own(x[:, :8]) + self.msg(x[:, 8:12])
+
+
+def _message_rule(fr: Frames, me: np.ndarray) -> np.ndarray:
+    """The toy sender's symbol (MESSAGE_RULE) for car slot me[i] of each moment."""
+    from ..messages import situations
+    sit = situations(fr, me)
+    rows = np.arange(len(fr))
+    team = fr.car_team[rows, me]
+    y = canon(fr.car_pos, team_sign(team)[:, None])[..., 1]
+    mates = fr.car_team == team[:, None]
+    back = y[rows, me] <= np.where(mates, y, np.inf).min(1) + 1e-6
+    return np.where(sit["closest"] > 0.5, np.where(sit["ball_half"] > 0.5, 0, 1), np.where(back, 2, 3))
+
+
+def message_team(n_games: int = 40, per_game: int = 150, listens: bool = True, noise: float = 1.0,
+                 seed: int = 0) -> Any:
+    """A toy 2v2 team that talks, for trying the message-channel tools (``study.messages``) in seconds.
+
+    Every car sends one of 4 symbols that says where it stands (MESSAGE_RULE): its message logits are 3 for the
+    rule's symbol plus noise (``noise``), so most decisions send it. Its team-mate's network, :class:`MessageNet`,
+    reads the symbol (the input's last 4 numbers) and, with ``listens``, plays differently for each one. The moments
+    are independent random 2v2 states (synthetic_moments' kind), seen by a blue car.
+
+    Returns a namespace: ``moments`` (with ``obs``, the 12 inputs), ``logits`` [N, 4] (what each seen car sends),
+    ``policy`` (the receiver as a Policy), ``channel`` (messages.Channel: the symbol's 4 columns) and ``rule``."""
+    from types import SimpleNamespace
+
+    from ..messages import Channel, situations
+    rng = np.random.default_rng(seed)
+    n = n_games * per_game
+    fr = random_frames(n, rng, n_cars=4)
+    me = rng.integers(0, 2, n)
+    mate = 1 - me
+    sent = _message_rule(fr, me)
+    heard = _message_rule(fr, mate)
+    logits = 3.0 * np.eye(4)[sent] + rng.normal(0.0, noise, (n, 4))
+    sit = situations(fr, me)
+    rows = np.arange(n)
+    team = fr.car_team[rows, me]
+    sign = team_sign(team)
+    bpos, cpos = canon(fr.ball_pos, sign), canon(fr.car_pos[rows, me], sign)
+    own = np.stack([bpos[:, 0] / 4096, bpos[:, 1] / 5120, cpos[:, 0] / 4096, cpos[:, 1] / 5120,
+                    fr.car_boost[rows, me] / 100, sit["closest"], sit["ball_half"], np.ones(n)], 1)
+    x = np.concatenate([own, np.eye(4)[heard]], 1).astype(np.float32)
+    m = Moments(fr, me, np.repeat(np.arange(n_games), per_game), np.tile(np.arange(per_game), n_games), obs=x,
+                meta={"source": "synthetic", "seed": seed, "demo": "message_team"})
+    m.with_labels()
+    pol = Policy(MessageNet(listens).eval(), name="toy team" + ("" if listens else " (deaf)"))
+    return SimpleNamespace(moments=m, logits=logits.astype(np.float32), policy=pol,
+                           channel=Channel(symbols=4, columns=[range(8, 12)]), rule=MESSAGE_RULE, sent=sent)
 
 
 def run(out: str | os.PathLike[str] = "cds-demo", source: str = "auto", games: int = 12, seconds: float = 60.0,
